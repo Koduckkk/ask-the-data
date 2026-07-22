@@ -86,10 +86,14 @@ _SCHOOL_SUFFIXES = ("Primary School", "High School", "College", "Public School")
 _FAMILY_NAMES = (
     "Smith", "Nguyen", "O'Brien", "Zhang", "Patel", "Lee", "Brown",
     "Kaur", "Ali", "Wilson", "Taylor", "Singh", "Chen", "Murphy", "Kelly",
+    "Muller",
 )
+# Zoe, Renee, Jose, Francois and Bjorn are here on purpose: they have accented
+# forms, so they are the names that encoding corruption can plausibly damage.
 _GIVEN_NAMES = (
     "Ava", "Liam", "Mia", "Noah", "Zoe", "Aarav", "Ruby", "Kai",
     "Ivy", "Omar", "Ella", "Jack", "Aisha", "Leo", "Grace",
+    "Renee", "Jose", "Francois", "Bjorn",
 )
 _MIDDLE_NAMES = ("", "", "", "James", "Rose", "Lee", "Grace", "May")
 

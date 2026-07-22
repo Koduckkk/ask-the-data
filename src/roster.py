@@ -207,7 +207,17 @@ def _build_schools(rng: np.random.Generator, n_schools: int = 40) -> pd.DataFram
             "school_id": ids,
             "school_name": names,
             "sector": rng.choice(["GOV", "CATH", "IND"], size=n_schools, p=[0.65, 0.2, 0.15]),
-            "postcode": [f"{v:04d}" for v in rng.integers(2000, 2999, size=n_schools)],
+            # Some postcodes genuinely begin with a zero. They are the ones that
+            # lose it to a numeric column somewhere upstream, so the corpus
+            # needs them or that defect has nothing to act on.
+            "postcode": [
+                f"{v:04d}"
+                for v in np.where(
+                    rng.random(n_schools) < 0.25,
+                    rng.integers(800, 999, size=n_schools),
+                    rng.integers(2000, 2999, size=n_schools),
+                )
+            ],
             "is_real_school": True,
         }
     )

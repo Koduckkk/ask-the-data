@@ -62,6 +62,21 @@ assert all(
     for accented in _ACCENTED_FORMS.values()
 ), "every accented form needs a corruptible character, or injection is a no-op"
 
+# Each accented character has this many corruption styles: double-encoded,
+# lossy "?", and the replacement character.
+_MOJIBAKE_VARIANTS = 3
+
+
+def _corrupt_variants(accented: str) -> list[str]:
+    """Every corrupted form of one accented name, one per corruption style."""
+    forms = []
+    for variant in range(_MOJIBAKE_VARIANTS):
+        text = accented
+        for char, corruptions in _MOJIBAKE.items():
+            text = text.replace(char, corruptions[variant])
+        forms.append(text)
+    return forms
+
 
 def inject_mojibake(
     values: pd.Series, rng: np.random.Generator, rate: float = DEFAULT_RATE
@@ -80,13 +95,17 @@ def inject_mojibake(
     eligible = np.flatnonzero(values.astype(str).isin(_ACCENTED_FORMS.keys()).to_numpy())
     if len(eligible) == 0:
         return out
+
     k = min(len(eligible), max(1, int(round(len(out) * rate))))
-    for i in rng.choice(eligible, size=k, replace=False):
-        accented = _ACCENTED_FORMS[str(out.iloc[i])]
-        for char, corruptions in _MOJIBAKE.items():
-            if char in accented:
-                accented = accented.replace(char, str(rng.choice(corruptions)))
-        out.iloc[i] = accented
+    targets = rng.choice(eligible, size=k, replace=False)
+
+    # The vocabulary of names is small and the corruptions are deterministic per
+    # (name, variant), so enumerate every damaged form once and index into it.
+    # Corrupting row by row costs seconds on a large corpus and buys nothing.
+    corrupted = {name: _corrupt_variants(accented) for name, accented in _ACCENTED_FORMS.items()}
+    picks = values.iloc[targets].astype(str)
+    choice = rng.integers(0, _MOJIBAKE_VARIANTS, size=k)
+    out.iloc[targets] = [corrupted[name][c] for name, c in zip(picks, choice)]
     return out
 
 
@@ -117,16 +136,25 @@ def inject_junk_characters(
     """Append or embed characters that a name validation regex should reject."""
     out = values.copy()
     idx = _pick(rng, len(out), rate)
-    for i in idx:
-        text = str(out.iloc[i])
-        junk = rng.choice(list(_JUNK_CHARS))
-        # Sometimes trailing, sometimes mid-string — a rule that only strips
-        # the ends should not get full marks.
-        if rng.random() < 0.7 or len(text) < 2:
-            out.iloc[i] = text + junk
-        else:
-            cut = int(rng.integers(1, len(text)))
-            out.iloc[i] = text[:cut] + junk + text[cut:]
+    if len(idx) == 0:
+        return out
+
+    # np.char needs a fixed-width string dtype; pandas hands back object.
+    text = values.iloc[idx].astype(str).to_numpy(dtype=np.str_)
+    junk = np.array(_JUNK_CHARS)[rng.integers(0, len(_JUNK_CHARS), size=len(idx))]
+    lengths = np.char.str_len(text)
+
+    # Sometimes trailing, sometimes mid-string — a rule that only strips the
+    # ends should not get full marks.
+    trailing = (rng.random(len(idx)) < 0.7) | (lengths < 2)
+    cuts = np.maximum(1, (rng.random(len(idx)) * np.maximum(lengths - 1, 1)).astype(int))
+
+    damaged = np.where(
+        trailing,
+        np.char.add(text, junk),
+        [t[:c] + j + t[c:] for t, c, j in zip(text, cuts, junk)],
+    )
+    out.iloc[idx] = damaged
     return out
 
 
@@ -140,16 +168,17 @@ def inject_whitespace_and_case(
     """
     out = values.copy()
     idx = _pick(rng, len(out), rate)
-    for i in idx:
-        text = str(out.iloc[i])
-        roll = rng.random()
-        if roll < 0.35:
-            text = text.lower()
-        elif roll < 0.7:
-            text = text.upper()
-        lead = rng.choice(["", " ", "  ", "\t"])
-        trail = rng.choice(["", " ", "  "])
-        out.iloc[i] = f"{lead}{text}{trail}"
+    if len(idx) == 0:
+        return out
+
+    text = values.iloc[idx].astype(str).to_numpy(dtype=np.str_)
+    roll = rng.random(len(idx))
+    text = np.where(roll < 0.35, np.char.lower(text), text)
+    text = np.where((roll >= 0.35) & (roll < 0.7), np.char.upper(text), text)
+
+    lead = np.array(["", " ", "  ", "\t"])[rng.integers(0, 4, size=len(idx))]
+    trail = np.array(["", " ", "  "])[rng.integers(0, 3, size=len(idx))]
+    out.iloc[idx] = np.char.add(np.char.add(lead, text), trail)
     return out
 
 
@@ -179,14 +208,22 @@ def inject_id_typos(
     """
     out = values.copy()
     idx = _pick(rng, len(out), rate)
-    for i in idx:
-        text = list(str(out.iloc[i]))
-        positions = [j for j in range(len(text) - 1) if text[j] != text[j + 1]]
+    if len(idx) == 0:
+        return out
+
+    text = values.iloc[idx].astype(str).to_numpy()
+    draw = rng.random(len(idx))
+    swapped = []
+    for value, d in zip(text, draw):
+        # Only swap unequal neighbours — transposing "77" changes nothing and
+        # would quietly report a typo that is not there.
+        positions = [j for j in range(len(value) - 1) if value[j] != value[j + 1]]
         if not positions:
+            swapped.append(value)
             continue
-        j = int(rng.choice(positions))
-        text[j], text[j + 1] = text[j + 1], text[j]
-        out.iloc[i] = "".join(text)
+        j = positions[int(d * len(positions))]
+        swapped.append(value[:j] + value[j + 1] + value[j] + value[j + 2 :])
+    out.iloc[idx] = swapped
     return out
 
 
@@ -298,21 +335,23 @@ def inject_date_formats(
     """
     out = values.astype("object").copy()
     idx = _pick(rng, len(out), rate)
-    for i in idx:
-        raw = str(out.iloc[i])
-        try:
-            stamp = pd.Timestamp(raw)
-        except ValueError:
-            continue
-        style = rng.choice(["dmy_slash", "dmy_dash", "mdy_slash", "short_month"])
-        if style == "dmy_slash":
-            out.iloc[i] = stamp.strftime("%d/%m/%Y")
-        elif style == "dmy_dash":
-            out.iloc[i] = stamp.strftime("%d-%m-%Y")
-        elif style == "mdy_slash":
-            out.iloc[i] = stamp.strftime("%m/%d/%Y")
-        else:
-            out.iloc[i] = stamp.strftime("%d-%b-%y")
+    if len(idx) == 0:
+        return out
+
+    stamps = pd.to_datetime(values.iloc[idx], errors="coerce")
+    styles = ["%d/%m/%Y", "%d-%m-%Y", "%m/%d/%Y", "%d-%b-%y"]
+    pick = rng.integers(0, len(styles), size=len(idx))
+
+    # Format per style in bulk rather than per row: .dt.strftime is vectorised,
+    # so four passes over subsets beats one pass per value.
+    rendered = pd.Series(index=stamps.index, dtype="object")
+    for s, fmt in enumerate(styles):
+        mask = pick == s
+        if mask.any():
+            rendered.iloc[mask] = stamps.iloc[mask].dt.strftime(fmt)
+
+    # Unparseable values keep whatever they already had.
+    out.iloc[idx] = rendered.where(stamps.notna(), values.iloc[idx]).to_numpy()
     return out
 
 
@@ -355,10 +394,17 @@ def inject_code_variants(
     mapping = CODE_VARIANTS[vocabulary]
     out = values.astype("object").copy()
     idx = _pick(rng, len(out), rate)
-    for i in idx:
-        canonical = out.iloc[i]
-        if canonical in mapping:
-            # str() because rng.choice returns numpy scalars, which serialise
-            # with their type wrapper rather than as plain text.
-            out.iloc[i] = str(rng.choice(mapping[canonical]))
+    if len(idx) == 0:
+        return out
+
+    picks = values.iloc[idx].astype("object")
+    # One uniform draw per row, scaled to each canonical value's own number of
+    # variants — the lists are different lengths, so a shared index would skew
+    # toward whichever spellings happen to come first.
+    draw = rng.random(len(idx))
+    replaced = [
+        mapping[v][int(d * len(mapping[v]))] if v in mapping else v
+        for v, d in zip(picks, draw)
+    ]
+    out.iloc[idx] = replaced
     return out

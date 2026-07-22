@@ -23,7 +23,13 @@ import pandas as pd
 SEED = 20260722
 
 YEAR_LEVELS = (3, 5, 7, 9)
-STUDENTS_PER_YEAR_LEVEL = 150
+
+# ~50k students total. Large enough that query performance and join strategy
+# actually matter — a corpus of a few hundred rows hides both — while still
+# generating in well under a second. Real cohorts run several times this; the
+# generator handles 400k in a couple of seconds if you raise this.
+STUDENTS_PER_YEAR_LEVEL = 12_500
+
 TEST_YEAR = 2024
 
 DOMAINS = ("Reading", "Numeracy", "Spelling", "Grammar and Punctuation", "Writing")

@@ -28,6 +28,47 @@ TEST_YEAR = 2024
 
 DOMAINS = ("Reading", "Numeracy", "Spelling", "Grammar and Punctuation", "Writing")
 
+# Items per domain in the vendor feed. Literacy arrives as one "L" block that
+# has to be split by question number: L01-L06 are Spelling, L26-L31 are Grammar
+# and Punctuation. Nothing in the file says so — it is inferred from the number.
+ITEMS_PER_DOMAIN = {
+    "Reading": 8,
+    "Numeracy": 8,
+    "Spelling": 6,
+    "Grammar and Punctuation": 6,
+    "Writing": 10,
+}
+MAX_RAW_SCORE = {d: n for d, n in ITEMS_PER_DOMAIN.items()}
+
+# Proficiency bands, lowest to highest.
+PROFICIENCY_BANDS = (
+    "Needs Additional Support",
+    "Developing",
+    "Approaching Expectations",
+    "Strong",
+    "Exceeding",
+)
+
+# Cut points are expressed as offsets from each year level's own scale floor,
+# not as absolute scaled scores. Every year level sits on a different scale, so
+# a fixed set of absolute cuts would grade Year 9 against a Year 3 yardstick and
+# put nearly the whole cohort in the top band.
+PROFICIENCY_CUT_OFFSETS = (60.0, 110.0, 165.0, 215.0)
+
+# Each year level sits on its own scale, so the same raw score means something
+# different in Year 3 and Year 9.
+SCALE_SPAN = 260.0
+
+
+def scale_floor(year_level: int) -> float:
+    """Bottom of the scaled-score range for a year level."""
+    return 250.0 + (year_level - 3) * 45.0
+
+
+def _logistic(p: float, steepness: float = 6.0) -> float:
+    """S-curve on [0, 1], centred at 0.5."""
+    return 1.0 / (1.0 + np.exp(-steepness * (p - 0.5)))
+
 # Pseudo-schools: administrative placeholders that appear in the source data but
 # are not real schools. Records carrying these must be excluded from reporting.
 PSEUDO_SCHOOL_IDS = ("00000", "99999", "REGION-A", "REGION-B", "unassigned")
@@ -60,6 +101,62 @@ class Roster:
     students: pd.DataFrame
     schools: pd.DataFrame
     results: pd.DataFrame
+    score_map: pd.DataFrame
+
+
+def build_score_map(year_levels=YEAR_LEVELS) -> pd.DataFrame:
+    """Raw score -> scaled score lookup, one row per (year level, domain, raw).
+
+    Scaled scores are not independent of raw scores: the same raw score on the
+    same test form always maps to the same scaled score. Modelling this as a
+    lookup rather than a second random draw is what makes the relationship
+    *checkable* — a cleaning bug that shuffles rows or mismatches a join shows
+    up as a raw/scaled pair that does not appear in this table.
+
+    The curve is deliberately non-linear — shallow at both ends and steep in
+    the middle, where an extra correct answer actually discriminates between
+    students. A naive linear back-calculation therefore does not reproduce it,
+    so the lookup has to genuinely be used.
+    """
+    rows = []
+    for year_level in year_levels:
+        floor = scale_floor(year_level)
+        span = SCALE_SPAN
+        for domain, max_raw in MAX_RAW_SCORE.items():
+            # Logistic curve, rescaled so raw 0 maps to the floor and max raw
+            # maps to floor + span exactly.
+            lo, hi = _logistic(0.0), _logistic(1.0)
+            for raw in range(max_raw + 1):
+                p = raw / max_raw
+                shaped = (_logistic(p) - lo) / (hi - lo)
+                rows.append(
+                    {
+                        "year_level": year_level,
+                        "domain": domain,
+                        "raw_score": raw,
+                        "scaled_score": round(floor + shaped * span, 1),
+                    }
+                )
+    return pd.DataFrame(rows)
+
+
+def assign_proficiency(scaled: pd.Series, year_level: pd.Series) -> pd.Series:
+    """Derive the proficiency band from the scaled score and year level.
+
+    Derived, never drawn independently — so a record whose band disagrees with
+    its score is a genuine inconsistency for the pipeline to catch, rather than
+    noise the generator invented.
+
+    Banding is relative to the year level's own scale: a scaled score of 400 is
+    a strong Year 3 result and a weak Year 9 one.
+    """
+    floor = year_level.map(scale_floor).astype(float)
+    offset = scaled.astype(float) - floor
+
+    band = pd.Series(PROFICIENCY_BANDS[0], index=scaled.index, dtype="object")
+    for cut, label in zip(PROFICIENCY_CUT_OFFSETS, PROFICIENCY_BANDS[1:]):
+        band = band.mask(offset >= cut, label)
+    return band.mask(scaled.isna(), None)
 
 
 def _make_student_ids(rng: np.random.Generator, n: int) -> list[str]:
@@ -170,19 +267,25 @@ def _build_students(rng: np.random.Generator, schools: pd.DataFrame) -> pd.DataF
     return students
 
 
-def _build_results(rng: np.random.Generator, students: pd.DataFrame) -> pd.DataFrame:
-    """One row per (student, domain) — the assessment results themselves."""
+def _build_results(
+    rng: np.random.Generator,
+    students: pd.DataFrame,
+    score_map: pd.DataFrame,
+    test_year: int,
+) -> pd.DataFrame:
+    """One row per (student, domain) — the assessment results themselves.
+
+    Raw score is the primitive; scaled score and proficiency are *derived* from
+    it. That ordering matters: it means the three columns agree by construction
+    here, so any disagreement in the emitted sources is mess that was injected
+    deliberately, not an accident of the generator.
+    """
     results = students[["student_id", "year_level", "school_id", "never_sat"]].merge(
         pd.DataFrame({"domain": list(DOMAINS)}), how="cross"
     )
 
     n = len(results)
-    # Scaled score drifts upward with year level, so aggregates are plausible and
-    # a cleaning bug that mixes year levels is visible in the output.
-    centre = 380 + (results["year_level"].to_numpy() - 3) * 25
-    results["score"] = np.clip(rng.normal(centre, 70, size=n), 100, 800).round(1)
-    results["raw_score"] = rng.integers(0, 41, size=n)
-    results["test_year"] = TEST_YEAR
+    results["test_year"] = test_year
 
     # Participation: most sit, some are absent, exempt, withdrawn or refuse.
     results["participation"] = rng.choice(
@@ -190,26 +293,61 @@ def _build_results(rng: np.random.Generator, students: pd.DataFrame) -> pd.DataF
     )
     results.loc[results["never_sat"], "participation"] = "X"
 
-    # A score only exists where the student actually participated.
+    # Ability is a per-student trait, so a student who reads well tends to also
+    # spell well. Without this every domain is independent and student-level
+    # aggregates are uninteresting.
+    ability = pd.Series(
+        rng.normal(0, 1, size=len(students)), index=students["student_id"]
+    )
+    max_raw = results["domain"].map(MAX_RAW_SCORE).to_numpy()
+    z = ability.reindex(results["student_id"]).to_numpy() + rng.normal(0, 0.6, size=n)
+    # Squash the latent ability onto [0, 1] and scale to the domain's item count.
+    proportion = np.clip(0.5 + z * 0.18, 0.02, 0.98)
+    results["raw_score"] = np.rint(proportion * max_raw).astype(int)
+
+    # Scaled score comes from the lookup — never recomputed independently.
+    results = results.merge(
+        score_map, on=["year_level", "domain", "raw_score"], how="left"
+    )
+    results["proficiency"] = assign_proficiency(
+        results["scaled_score"], results["year_level"]
+    )
+
+    # Anyone who did not participate has no result at all. Note this is *not*
+    # the refused-but-attempted case: a refusal (R) legitimately scores zero,
+    # and stray item rows claiming otherwise are the artefact, not the truth.
+    # That contradiction is injected later, in the emitted sources.
     absent = results["participation"] != "P"
-    results.loc[absent, ["score", "raw_score"]] = np.nan
+    results.loc[absent, ["raw_score", "scaled_score"]] = np.nan
+    results.loc[absent, "proficiency"] = None
 
     return results.drop(columns="never_sat").reset_index(drop=True)
 
 
-def build_roster(seed: int = SEED) -> Roster:
-    """Build the canonical roster. Deterministic for a given seed."""
-    rng = np.random.default_rng(seed)
+def build_roster(seed: int = SEED, test_year: int = TEST_YEAR) -> Roster:
+    """Build the canonical roster. Deterministic for a given (seed, year).
+
+    ``test_year`` is threaded through rather than read from the module constant
+    so later work can emit several years from one call site. Varying the seed
+    with the year keeps each year's cohort distinct.
+    """
+    rng = np.random.default_rng(seed + test_year)
     schools = _build_schools(rng)
     students = _build_students(rng, schools)
-    results = _build_results(rng, students)
-    return Roster(students=students, schools=schools, results=results)
+    score_map = build_score_map()
+    results = _build_results(rng, students, score_map, test_year)
+    return Roster(
+        students=students, schools=schools, results=results, score_map=score_map
+    )
 
 
 if __name__ == "__main__":
     roster = build_roster()
-    print(f"schools:  {len(roster.schools):>6,} rows")
-    print(f"students: {len(roster.students):>6,} rows")
-    print(f"results:  {len(roster.results):>6,} rows")
+    print(f"schools:   {len(roster.schools):>6,} rows")
+    print(f"students:  {len(roster.students):>6,} rows")
+    print(f"results:   {len(roster.results):>6,} rows")
+    print(f"score_map: {len(roster.score_map):>6,} rows")
     print()
-    print(roster.students.head(5).to_string(index=False))
+    print(roster.results.head(6).to_string(index=False))
+    print()
+    print(roster.results["proficiency"].value_counts().to_string())

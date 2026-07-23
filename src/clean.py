@@ -271,6 +271,133 @@ def resolve_conflicting_duplicates(
     return out
 
 
+# --- §3 value defects --------------------------------------------------------
+
+# The numeric sentinels the pipeline must treat as "no value". Kept in sync with
+# mess.SCORE_SENTINELS. Both the int and float spelling, since a CSV round-trip
+# turns 999 into "999.0".
+SCORE_SENTINELS = frozenset({"999", "999.0", "-1", "-1.0", "9999", "9999.0"})
+
+# Non-numeric strings that appear in the score columns.
+_TEXT_NON_SCORES = frozenset({"absent", "n/a", "-", "exempt", "abs"})
+
+
+def _canonical_map(vocabulary: str) -> dict[str, str]:
+    """Invert mess.CODE_VARIANTS so every variant maps to its canonical value.
+
+    Built from the injector's own table rather than hand-copied, so the cleaner
+    can never fall out of step with what was injected. Matching is done on a
+    stripped, lower-cased key so whitespace and case variants collapse too.
+    """
+    from mess import CODE_VARIANTS
+
+    inverted = {}
+    for canonical, variants in CODE_VARIANTS[vocabulary].items():
+        for variant in variants:
+            inverted[variant.strip().lower()] = canonical
+    return inverted
+
+
+def recode_sentinels(
+    values: pd.Series, report: CleaningReport | None = None, column: str = ""
+) -> pd.Series:
+    """Replace numeric sentinels (999, -1, 9999) with a true null.
+
+    A sentinel in a numeric column is the quiet killer: it aggregates. One 999
+    left in a score column moves every mean and total that touches it, and
+    nothing errors to warn you.
+    """
+    as_str = values.astype("string").str.strip()
+    is_sentinel = as_str.isin(SCORE_SENTINELS).fillna(False)
+    out = values.mask(is_sentinel, pd.NA)
+    if report is not None:
+        report.record("recode_sentinels", column, is_sentinel.sum())
+    return out
+
+
+def coerce_numeric(
+    values: pd.Series, report: CleaningReport | None = None, column: str = ""
+) -> pd.Series:
+    """Force a column to numeric, turning non-numeric text into null.
+
+    A single "absent" in a score column loads the whole column as text, after
+    which every comparison is lexical ("9" > "10"). Coercing with errors→null
+    restores a real numeric column and records how many values could not be
+    parsed.
+    """
+    numeric = pd.to_numeric(values, errors="coerce")
+    # Count values that were non-null before but became null — i.e. text that
+    # could not be parsed, not values that were already missing.
+    lost = (values.notna() & numeric.isna()).sum()
+    if report is not None:
+        report.record("coerce_numeric", column, lost, "non-numeric -> null")
+    return numeric
+
+
+def canonicalise_code(
+    values: pd.Series,
+    vocabulary: str,
+    report: CleaningReport | None = None,
+    column: str = "",
+) -> pd.Series:
+    """Map every spelling variant of a coded value to its canonical form.
+
+    ``NUM``, ``Maths``, ``numeracy`` and ``Numeracy `` all become ``Numeracy``.
+    This is the rule that stops a group-by silently splitting one category into
+    five. Matching is whitespace- and case-insensitive; an unrecognised value is
+    left unchanged and shows up in the report's residual count.
+    """
+    mapping = _canonical_map(vocabulary)
+    key = values.astype("string").str.strip().str.lower()
+    mapped = key.map(mapping)
+    out = mapped.where(mapped.notna(), values)  # keep unknowns as-is
+    changed = (out != values).fillna(False)
+    unresolved = (values.notna() & mapped.isna()).sum()
+    if report is not None:
+        report.record(
+            "canonicalise_code",
+            column,
+            changed.sum(),
+            f"{vocabulary}; {unresolved} unresolved" if unresolved else vocabulary,
+        )
+    return out
+
+
+def parse_year_level(
+    values: pd.Series, report: CleaningReport | None = None, column: str = ""
+) -> pd.Series:
+    """Extract the integer year level from a mix of ``3`` and ``"Year 3"``.
+
+    A column that mixes ``3`` and ``Year 3`` looks numeric but is not, so a join
+    on it drops the string rows. Pulling the digits out gives one clean integer
+    key.
+    """
+    extracted = values.astype("string").str.extract(r"(\d+)", expand=False)
+    numeric = pd.to_numeric(extracted, errors="coerce").astype("Int64")
+    changed = (numeric.astype("string") != values.astype("string")).fillna(False)
+    if report is not None:
+        report.record("parse_year_level", column, changed.sum())
+    return numeric
+
+
+def parse_dates(
+    values: pd.Series, report: CleaningReport | None = None, column: str = ""
+) -> pd.Series:
+    """Parse mixed date formats to a single ISO date.
+
+    The source mixes ``2016-03-14``, ``14/03/2016``, ``14-Mar-16`` and the
+    ambiguous ``03/14/2016``. Parsing is day-first — the convention these feeds
+    use — which resolves the ambiguity consistently. Values that will not parse
+    become null and are counted.
+    """
+    parsed = pd.to_datetime(values, errors="coerce", dayfirst=True, format="mixed")
+    iso = parsed.dt.strftime("%Y-%m-%d")
+    unparsed = (values.notna() & parsed.isna()).sum()
+    if report is not None:
+        report.record("parse_dates", column, iso.notna().sum(), f"{unparsed} unparseable")
+    return iso
+
+
 if __name__ == "__main__":
     from pathlib import Path
 

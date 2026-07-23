@@ -143,14 +143,24 @@ def clean_schools(report: C.CleaningReport) -> pd.DataFrame:
     return tidy
 
 
-def build_database(db_path: Path = DB_PATH) -> tuple[dict[str, pd.DataFrame], C.CleaningReport]:
-    """Run the full cleaning pipeline and load the clean tables into DuckDB."""
+def run_cleaning() -> tuple[dict[str, pd.DataFrame], C.CleaningReport]:
+    """Run the cleaning pipeline and return the clean tables and the report.
+
+    Does not touch DuckDB — used by the data-quality page to obtain the same
+    per-rule counts the load produces, without rebuilding the database.
+    """
     report = C.CleaningReport()
     tables = {
         "students": clean_students(report),
         "results": clean_results(report),
         "schools": clean_schools(report),
     }
+    return tables, report
+
+
+def build_database(db_path: Path = DB_PATH) -> tuple[dict[str, pd.DataFrame], C.CleaningReport]:
+    """Run the full cleaning pipeline and load the clean tables into DuckDB."""
+    tables, report = run_cleaning()
 
     db_path.unlink(missing_ok=True)  # rebuild from scratch, never append
     con = duckdb.connect(str(db_path))

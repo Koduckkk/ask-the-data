@@ -386,11 +386,27 @@ def parse_dates(
     """Parse mixed date formats to a single ISO date.
 
     The source mixes ``2016-03-14``, ``14/03/2016``, ``14-Mar-16`` and the
-    ambiguous ``03/14/2016``. Parsing is day-first — the convention these feeds
-    use — which resolves the ambiguity consistently. Values that will not parse
-    become null and are counted.
+    ambiguous ``03/14/2016``. Values already in ISO ``YYYY-MM-DD`` form are
+    parsed as-is; everything else is parsed day-first — the convention these
+    feeds use — which resolves the ambiguous slash cases consistently. Applying
+    day-first to an ISO date would silently swap its day and month, so the two
+    are handled separately. Values that will not parse become null and counted.
     """
-    parsed = pd.to_datetime(values, errors="coerce", dayfirst=True, format="mixed")
+    as_str = values.astype("string")
+    is_iso = as_str.str.match(r"^\d{4}-\d{2}-\d{2}$", na=False)
+
+    parsed = pd.Series(pd.NaT, index=values.index, dtype="datetime64[ns]")
+    if is_iso.any():
+        parsed = parsed.mask(
+            is_iso, pd.to_datetime(as_str.where(is_iso), errors="coerce")
+        )
+    if (~is_iso).any():
+        parsed = parsed.mask(
+            ~is_iso,
+            pd.to_datetime(
+                as_str.where(~is_iso), errors="coerce", dayfirst=True, format="mixed"
+            ),
+        )
     iso = parsed.dt.strftime("%Y-%m-%d")
     unparsed = (values.notna() & parsed.isna()).sum()
     if report is not None:

@@ -63,8 +63,15 @@ Then ask questions in plain English:
 ```bash
 streamlit run src/app.py             # text box, results, and the SQL beside them
 # or, from the command line:
-python src/nl_query.py "average year 9 numeracy score by gender"
+python src/nl_query.py "average writing score by year level"
 ```
+
+The app has two pages. The query page answers questions; the **Data Quality**
+page makes the cleaning visible — the raw dirty values next to their cleaned
+form for each defect, a count of every change the pipeline made, and the
+cross-table "refused but attempted" contradiction that no single file reveals.
+That page is the point of the project made tangible: real messy assessment data
+and the judgement that cleans it.
 
 With no API key this runs in **demo mode** — a set of canned questions — so the
 whole pipeline is runnable without one. Set `ANTHROPIC_API_KEY` (copy

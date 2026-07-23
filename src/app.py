@@ -18,6 +18,30 @@ from pathlib import Path
 
 import streamlit as st
 
+
+def _require_streamlit_run() -> None:
+    """Fail fast with one clear hint if run as `python app.py`.
+
+    A Streamlit script only works under `streamlit run`, which installs a
+    ScriptRunContext. Run with plain `python` there is none, and every Streamlit
+    call emits a "missing ScriptRunContext" warning — dozens of them, burying the
+    real problem. Detect the missing context and print a single instruction
+    instead.
+    """
+    from streamlit.runtime.scriptrunner import get_script_run_ctx
+
+    if get_script_run_ctx() is None:
+        print(
+            "This is a Streamlit app — run it with:\n\n"
+            "    streamlit run src/app.py\n\n"
+            "(plain `python src/app.py` does not start the server).",
+            file=sys.stderr,
+        )
+        raise SystemExit(1)
+
+
+_require_streamlit_run()
+
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import nl_query as NL

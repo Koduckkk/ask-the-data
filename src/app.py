@@ -44,6 +44,7 @@ _require_streamlit_run()
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import display as D
 import nl_query as NL
 
 st.set_page_config(page_title="Ask the Data", page_icon="🔎", layout="wide")
@@ -106,7 +107,17 @@ if question:
     with left:
         st.subheader("Result")
         if result.ok:
-            st.dataframe(result.rows, use_container_width=True, hide_index=True)
+            # Chart first when the shape suits one, then the table. Columns are
+            # humanised for display only — the SQL panel keeps the literal names.
+            spec = D.choose_chart(result.rows)
+            pretty = D.humanise_columns(result.rows)
+            if spec.kind != "table":
+                chart_df = pretty.set_index(D.humanise(spec.label))[[D.humanise(spec.value)]]
+                if spec.kind == "line":
+                    st.line_chart(chart_df)
+                else:
+                    st.bar_chart(chart_df)
+            st.dataframe(pretty, use_container_width=True, hide_index=True)
             st.caption(f"{len(result.rows):,} row(s)")
         else:
             st.warning(result.error)

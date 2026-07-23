@@ -70,7 +70,9 @@ With no API key this runs in **demo mode** — a set of canned questions — so 
 whole pipeline is runnable without one. Set `ANTHROPIC_API_KEY` (copy
 `.env.example` to `.env`) to ask free-form questions; the LLM translates them to
 SQL against the schema, and either way the generated SQL is shown next to the
-result.
+result. Results are charted automatically when the shape suits one (a trend over
+year levels as a line, a breakdown by category as bars), with a humanised table
+alongside — while the SQL panel keeps the literal column names you verify against.
 
 ## Example questions
 

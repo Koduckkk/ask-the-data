@@ -58,7 +58,31 @@ class QueryResult:
 # Canned question -> SQL pairs for keyless running. Chosen to cover the headline
 # question patterns and to exercise every table and join the schema supports.
 # Matching is on normalised keywords, so light rewording still hits.
+# Ordered so the first examples make the most interesting charts — a rising
+# trend over year levels, then a ranked set of schools — rather than a flat
+# by-gender breakdown that (correctly) shows no effect and reads as a dull chart.
 DEMO_QUERIES: list[tuple[frozenset[str], str, str]] = [
+    (
+        frozenset({"average", "writing", "year", "level"}),
+        "average writing score by year level",
+        """
+        SELECT year_level, ROUND(AVG(scaled_score), 1) AS avg_writing, COUNT(*) AS n
+        FROM results WHERE domain = 'Writing' AND scaled_score IS NOT NULL
+        GROUP BY year_level ORDER BY year_level
+        """,
+    ),
+    (
+        frozenset({"top", "schools", "average", "numeracy"}),
+        "top 10 schools by average numeracy score",
+        """
+        SELECT sc.school_name, ROUND(AVG(r.scaled_score), 1) AS avg_numeracy, COUNT(*) AS n
+        FROM results r
+        JOIN schools sc ON r.school_id = sc.school_id
+        WHERE r.domain = 'Numeracy' AND r.scaled_score IS NOT NULL
+        GROUP BY sc.school_name HAVING COUNT(*) >= 20
+        ORDER BY avg_numeracy DESC LIMIT 10
+        """,
+    ),
     (
         frozenset({"average", "year", "9", "numeracy", "gender"}),
         "average year 9 numeracy score by gender",
@@ -89,18 +113,6 @@ DEMO_QUERIES: list[tuple[frozenset[str], str, str]] = [
         """,
     ),
     (
-        frozenset({"top", "schools", "average", "numeracy"}),
-        "top 10 schools by average numeracy score",
-        """
-        SELECT sc.school_name, ROUND(AVG(r.scaled_score), 1) AS avg_numeracy, COUNT(*) AS n
-        FROM results r
-        JOIN schools sc ON r.school_id = sc.school_id
-        WHERE r.domain = 'Numeracy' AND r.scaled_score IS NOT NULL
-        GROUP BY sc.school_name HAVING COUNT(*) >= 20
-        ORDER BY avg_numeracy DESC LIMIT 10
-        """,
-    ),
-    (
         frozenset({"how", "many", "students", "sector"}),
         "how many students sat, by school sector",
         """
@@ -108,15 +120,6 @@ DEMO_QUERIES: list[tuple[frozenset[str], str, str]] = [
         FROM results r JOIN schools sc ON r.school_id = sc.school_id
         WHERE r.scaled_score IS NOT NULL
         GROUP BY sc.sector ORDER BY students DESC
-        """,
-    ),
-    (
-        frozenset({"average", "writing", "year", "level"}),
-        "average writing score by year level",
-        """
-        SELECT year_level, ROUND(AVG(scaled_score), 1) AS avg_writing, COUNT(*) AS n
-        FROM results WHERE domain = 'Writing' AND scaled_score IS NOT NULL
-        GROUP BY year_level ORDER BY year_level
         """,
     ),
 ]
@@ -260,7 +263,7 @@ def answer(
 if __name__ == "__main__":
     import sys
 
-    q = " ".join(sys.argv[1:]) or "average year 9 numeracy score by gender"
+    q = " ".join(sys.argv[1:]) or "average writing score by year level"
     res = answer(q)
     print(f"[{res.mode} mode] {res.question}\n")
     print(f"SQL:\n{res.sql}\n")

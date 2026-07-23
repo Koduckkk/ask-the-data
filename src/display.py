@@ -56,6 +56,19 @@ class ChartSpec:
     value: str = ""      # y-axis / measured column (original name)
 
 
+def chart_frame(frame: pd.DataFrame, spec: ChartSpec) -> pd.DataFrame:
+    """Build the humanised, indexed frame to hand to a Streamlit chart.
+
+    Drops rows whose label is null: a missing gender is a real data point in the
+    table, but a "null" bar on a chart reads as a category and is misleading. The
+    table alongside still shows it.
+    """
+    keep = frame[[spec.label, spec.value]].copy()
+    keep = keep[keep[spec.label].notna()]
+    keep = keep.rename(columns={spec.label: humanise(spec.label), spec.value: humanise(spec.value)})
+    return keep.set_index(humanise(spec.label))
+
+
 # Columns whose order implies a trend, so a line reads better than bars.
 _ORDINAL_HINTS = ("year", "level", "grade")
 

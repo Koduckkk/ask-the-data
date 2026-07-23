@@ -87,7 +87,7 @@ st.title("🔎 Ask the Data")
 question = st.text_input(
     "Ask a question about the assessment data",
     key="question",
-    placeholder="e.g. average year 9 numeracy score by gender",
+    placeholder="e.g. average writing score by year level",
 )
 
 if question:
@@ -112,11 +112,13 @@ if question:
             spec = D.choose_chart(result.rows)
             pretty = D.humanise_columns(result.rows)
             if spec.kind != "table":
-                chart_df = pretty.set_index(D.humanise(spec.label))[[D.humanise(spec.value)]]
+                chart_df = D.chart_frame(result.rows, spec)
                 if spec.kind == "line":
                     st.line_chart(chart_df)
                 else:
-                    st.bar_chart(chart_df)
+                    # Horizontal bars keep category labels readable — no
+                    # rotated text, and long school names fit down the y-axis.
+                    st.bar_chart(chart_df, horizontal=True)
             st.dataframe(pretty, use_container_width=True, hide_index=True)
             st.caption(f"{len(result.rows):,} row(s)")
         else:

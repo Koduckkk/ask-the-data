@@ -74,3 +74,23 @@ def test_no_label_column_falls_back_to_table():
     # All-numeric with no ordinal hint — nothing sensible to put on the x-axis.
     frame = pd.DataFrame({"a": [1.0, 2.0], "b": [3.0, 4.0]})
     assert D.choose_chart(frame).kind == "table"
+
+
+# --- chart_frame -------------------------------------------------------------
+
+
+def test_chart_frame_humanises_and_indexes():
+    frame = pd.DataFrame({"gender": ["M", "F"], "avg_scaled_score": [1.0, 2.0], "n": [5, 6]})
+    spec = D.choose_chart(frame)
+    cf = D.chart_frame(frame, spec)
+    assert cf.index.name == "Gender"
+    assert list(cf.columns) == ["Average Scaled Score"]
+
+
+def test_chart_frame_drops_null_labels():
+    # A missing gender must not appear as a "null" bar on the chart.
+    frame = pd.DataFrame({"gender": ["M", "F", None], "avg_scaled_score": [1.0, 2.0, 3.0]})
+    spec = D.choose_chart(frame)
+    cf = D.chart_frame(frame, spec)
+    assert len(cf) == 2
+    assert set(cf.index) == {"M", "F"}

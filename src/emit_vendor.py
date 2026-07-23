@@ -44,14 +44,31 @@ RAW_DIR = Path(__file__).resolve().parent.parent / "data" / "raw"
 SPELLING_QUESTIONS = range(1, 1 + ITEMS_PER_DOMAIN["Spelling"])          # L01..L06
 GRAMMAR_QUESTIONS = range(26, 26 + ITEMS_PER_DOMAIN["Grammar and Punctuation"])  # L26..L31
 
-# Domain -> (column prefix, question numbers). Writing is delivered as a single
-# holistic mark rather than per-item, so it is handled separately.
+# Domain -> (column prefix, question numbers). Writing is NOT here: it does not
+# fit the 0/1 item pattern (it is marked against criteria, not right/wrong
+# questions) and it arrives in its own files with a different shape — exactly as
+# it does in the real feeds. See emit_writing().
 _ITEM_LAYOUT = {
     "Numeracy": ("N", range(1, 1 + ITEMS_PER_DOMAIN["Numeracy"])),
     "Reading": ("R", range(1, 1 + ITEMS_PER_DOMAIN["Reading"])),
     "Spelling": ("L", SPELLING_QUESTIONS),
     "Grammar and Punctuation": ("L", GRAMMAR_QUESTIONS),
 }
+
+# Writing is marked against criteria, each scored on a small band. The column
+# names are the vendor's, distinct again from anything in the warehouse.
+WRITING_CRITERIA = (
+    "wr_audience",
+    "wr_text_structure",
+    "wr_ideas",
+    "wr_persuasive_devices",
+    "wr_vocabulary",
+    "wr_cohesion",
+    "wr_paragraphing",
+    "wr_sentence_structure",
+    "wr_punctuation",
+    "wr_spelling",
+)
 
 # The sentinel that means "not attempted", which must not be summed as a mark.
 NOT_ATTEMPTED = 9
@@ -148,6 +165,77 @@ def _build_year_level(roster: Roster, year_level: int, rng: np.random.Generator)
     return frame
 
 
+def _distribute_criteria(raw_score: int, rng: np.random.Generator) -> np.ndarray:
+    """Split a writing raw score across the criteria, each in band 0-6.
+
+    Like the item marks, the criterion sub-scores sum to the warehouse raw
+    score exactly, so the separate writing file reconciles the same way the
+    paper files do.
+    """
+    n = len(WRITING_CRITERIA)
+    scores = np.zeros(n, dtype=int)
+    remaining = int(raw_score)
+    order = rng.permutation(n)
+    for c in order:
+        if remaining <= 0:
+            break
+        take = min(6, remaining, int(rng.integers(0, 4)) + (remaining > n))
+        scores[c] = take
+        remaining -= take
+    # Any leftover from the capped draws lands on criteria with room.
+    while remaining > 0:
+        c = order[int(rng.integers(n))]
+        if scores[c] < 6:
+            scores[c] += 1
+            remaining -= 1
+    return scores
+
+
+def _build_writing(roster: Roster, year_levels: tuple[int, ...], rng: np.random.Generator) -> pd.DataFrame:
+    """Writing results for a set of year levels, one row per student."""
+    mask = roster.results["year_level"].isin(year_levels) & (
+        roster.results["domain"] == "Writing"
+    ) & (roster.results["participation"] == "P")
+    writing = roster.results[mask]
+
+    ids = writing["student_id"].to_numpy()
+    raws = writing["raw_score"].to_numpy()
+    students = roster.students.set_index("student_id")
+
+    frame = pd.DataFrame(
+        {
+            "PlatformId": ids,
+            "Ylevel": writing["year_level"].to_numpy(),
+            "Surname": students["family_name"].reindex(ids).to_numpy(),
+            "FirstName": students["given_name"].reindex(ids).to_numpy(),
+        }
+    )
+    block = np.vstack([_distribute_criteria(int(r), rng) for r in raws])
+    for j, crit in enumerate(WRITING_CRITERIA):
+        frame[crit] = block[:, j]
+    return frame
+
+
+def emit_writing(roster: Roster, rng: np.random.Generator, out_dir: Path = RAW_DIR) -> dict[str, Path]:
+    """Emit the two writing files: Y3 alone, Y5/7/9 combined.
+
+    The split mirrors the real delivery layout, where Year 3 writing arrives in
+    its own file and the upper year levels are combined in another. It gives the
+    pipeline a "one domain, two files of different scope" assembly step on top
+    of the wide/long reshape the paper files already require.
+    """
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written = {}
+    for label, year_levels in {"y3": (3,), "y579": (5, 7, 9)}.items():
+        frame = _build_writing(roster, year_levels, rng)
+        frame["Surname"] = M.inject_whitespace_and_case(frame["Surname"], rng, rate=0.03)
+        frame = M.inject_duplicate_rows(frame, rng, rate=0.02)
+        path = out_dir / f"vendor_writing_{label}.csv"
+        frame.to_csv(path, index=False)
+        written[label] = path
+    return written
+
+
 def emit_vendor(roster: Roster, rng: np.random.Generator, out_dir: Path = RAW_DIR) -> dict[int, Path]:
     """Emit one wide vendor CSV per year level. Returns {year_level: path}."""
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -171,4 +259,7 @@ if __name__ == "__main__":
     rng = np.random.default_rng(23)
     for year_level, path in emit_vendor(roster, rng).items():
         size = path.stat().st_size / 1e6
-        print(f"Y{year_level} -> {path.name:20s} {size:6.1f} MB")
+        print(f"Y{year_level:<4} -> {path.name:26s} {size:6.1f} MB")
+    for label, path in emit_writing(roster, rng).items():
+        size = path.stat().st_size / 1e6
+        print(f"{label:<6} -> {path.name:26s} {size:6.1f} MB")

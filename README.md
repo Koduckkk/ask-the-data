@@ -26,8 +26,21 @@ The defect catalogue is in [docs/quirks.md](docs/quirks.md).
 
 ```bash
 pip install -r requirements.txt
-python src/generate_data.py     # write messy CSVs to data/raw/
+python src/generate_data.py          # write the messy corpus to data/raw/
 ```
+
+This writes ten CSVs — three warehouse tables plus a separate participation
+table, four wide vendor files, and two writing files — and prints a summary of
+what it wrote. The data is not committed; the generator is, and regenerating is
+the intended way to get it.
+
+```bash
+python src/generate_data.py --students 400000   # production scale (~2.5s)
+python src/generate_data.py --seed 7            # a different reproducible batch
+```
+
+Everything is deterministic: the same arguments always produce the same files.
+The defect catalogue is in [docs/quirks.md](docs/quirks.md).
 
 Further steps (clean, load, query) are added as the pipeline is built.
 

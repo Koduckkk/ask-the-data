@@ -171,6 +171,106 @@ def normalise_whitespace_case(
     return out
 
 
+# --- §2 identifier and row defects -------------------------------------------
+
+
+def normalise_id(
+    values: pd.Series, report: CleaningReport | None = None, column: str = ""
+) -> pd.Series:
+    """Reduce an identifier to a canonical join key.
+
+    The warehouse stores ``local_id`` as a zero-padded string (``0173501``); the
+    vendor stores the same value as an integer with the padding gone
+    (``173501``). Neither is more correct — they simply disagree about type. The
+    fix is to normalise *both* sides to the same form before joining, here by
+    stripping leading zeros and surrounding whitespace so the two meet.
+
+    A join on the raw values would silently lose every zero-padded row; this is
+    what prevents that.
+    """
+    as_str = values.astype("string").str.strip()
+    normalised = as_str.str.lstrip("0")
+    # A value that was all zeros must not vanish to an empty string.
+    normalised = normalised.mask((as_str.notna()) & (normalised == ""), "0")
+    changed = (normalised != as_str).fillna(False)
+    if report is not None:
+        report.record("normalise_id", column, changed.sum())
+    return normalised
+
+
+def flag_unmatched_ids(
+    frame: pd.DataFrame,
+    key: str,
+    reference_keys: set,
+    report: CleaningReport | None = None,
+) -> pd.DataFrame:
+    """Mark rows whose id matches nothing in a reference set.
+
+    These are the transposed-digit typos: still well-formed, so validation
+    cannot catch them — they can only be found by failing to join. The rule does
+    **not** try to repair them, because the original digits are unrecoverable.
+    It adds an ``id_unmatched`` flag and counts them, so the report surfaces the
+    rows rather than a later inner join dropping them without trace.
+    """
+    out = frame.copy()
+    unmatched = ~out[key].isin(reference_keys)
+    out["id_unmatched"] = unmatched
+    if report is not None:
+        report.record(
+            "flag_unmatched_ids", key, unmatched.sum(), "flagged, not repaired"
+        )
+    return out
+
+
+def drop_exact_duplicates(
+    frame: pd.DataFrame, report: CleaningReport | None = None, name: str = ""
+) -> pd.DataFrame:
+    """Remove rows that are exact copies, counting how many fell out.
+
+    The count matters: a load that silently doubled is a different problem from
+    a source that genuinely repeats, and only the number tells them apart.
+    """
+    before = len(frame)
+    out = frame.drop_duplicates().reset_index(drop=True)
+    removed = before - len(out)
+    if report is not None:
+        report.record("drop_exact_duplicates", name, removed)
+    return out
+
+
+def resolve_conflicting_duplicates(
+    frame: pd.DataFrame,
+    key: str,
+    prefer: str,
+    ascending: bool = False,
+    report: CleaningReport | None = None,
+) -> pd.DataFrame:
+    """Collapse rows that share a key but disagree, by a documented keep-rule.
+
+    Exact duplicates are easy; the hard case is two rows with the same key and a
+    different value in some column. Something must decide which wins, and that
+    decision has to be explicit rather than left to whichever row the file
+    happened to list first.
+
+    The rule here: within a key, keep the row with the largest (or smallest)
+    value of ``prefer``. It is a stand-in for a real priority — a real pipeline
+    would prefer, say, the most recent record — but the point is that the choice
+    is named and reproducible.
+    """
+    before = len(frame)
+    ordered = frame.sort_values(prefer, ascending=ascending, kind="stable")
+    out = ordered.drop_duplicates(subset=key, keep="first").reset_index(drop=True)
+    collapsed = before - len(out)
+    if report is not None:
+        report.record(
+            "resolve_conflicting_duplicates",
+            key,
+            collapsed,
+            f"keep {'min' if ascending else 'max'} {prefer}",
+        )
+    return out
+
+
 if __name__ == "__main__":
     from pathlib import Path
 

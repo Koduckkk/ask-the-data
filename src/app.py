@@ -85,8 +85,13 @@ if question:
             st.dataframe(result.rows, use_container_width=True, hide_index=True)
             st.caption(f"{len(result.rows):,} row(s)")
         else:
-            st.error(result.error)
+            st.warning(result.error)
             if result.suggestion:
                 st.caption(result.suggestion)
+            # On a demo miss, offer the closest example questions as buttons.
+            for example in result.examples:
+                if st.button(example, key=f"near-{example}", use_container_width=True):
+                    st.session_state["question"] = example
+                    st.rerun()
 else:
     st.caption("Type a question above, or pick an example from the sidebar.")

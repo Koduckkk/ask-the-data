@@ -46,6 +46,7 @@ class QueryResult:
     mode: str = ""                 # "llm" or "demo"
     error: str = ""                # set when generation/validation/execution failed
     suggestion: str = ""           # what the user might try instead
+    examples: list[str] = field(default_factory=list)  # nearest demo questions on a miss
 
     @property
     def ok(self) -> bool:
@@ -145,6 +146,22 @@ def _match_demo(question: str) -> str | None:
     return best_sql
 
 
+def nearest_examples(question: str, n: int = 3) -> list[str]:
+    """The canned questions most similar to one that did not match.
+
+    When a question misses in demo mode, showing the closest examples turns a
+    dead end into a signpost — the user sees what demo mode *can* answer and how
+    close their phrasing was.
+    """
+    tokens = _normalise(question)
+    ranked = sorted(
+        DEMO_QUERIES,
+        key=lambda row: len(row[0] & tokens),
+        reverse=True,
+    )
+    return [example for _keys, example, _sql in ranked[:n]]
+
+
 # --- llm mode ----------------------------------------------------------------
 
 _SYSTEM = """You translate a question about assessment data into a single \
@@ -208,8 +225,11 @@ def answer(
     if mode == "demo":
         candidate = _match_demo(question)
         if candidate is None:
-            result.error = "no matching demo query"
-            result.suggestion = "Try one of the example questions, or set a key for free-form queries."
+            result.error = "Demo mode can only answer its example questions."
+            result.suggestion = (
+                "Set ANTHROPIC_API_KEY for free-form questions, or try one of these:"
+            )
+            result.examples = nearest_examples(question)
             return result
     else:
         schema = schema if schema is not None else SCHEMA_DOC.read_text()
@@ -248,3 +268,5 @@ if __name__ == "__main__":
         print(res.rows.to_string(index=False))
     else:
         print(f"Error: {res.error}\n{res.suggestion}")
+        for example in res.examples:
+            print(f"  - {example}")

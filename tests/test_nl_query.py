@@ -51,6 +51,14 @@ def test_unmatched_question_is_a_clean_error(con):
     assert res.suggestion
 
 
+def test_unmatched_question_offers_nearest_examples(con):
+    # A miss should signpost what demo mode can answer, not dead-end.
+    res = NL.answer("which school has the most year 3 students", con=con, mode="demo")
+    assert not res.ok
+    assert res.examples  # nearest canned questions surfaced
+    assert all(ex in NL.demo_examples() for ex in res.examples)
+
+
 def test_sql_always_shown_even_on_error(con):
     # A demo miss has no SQL, but a guardrail rejection must still surface the SQL.
     # Inject a bad canned query to prove the guardrail path populates .sql.

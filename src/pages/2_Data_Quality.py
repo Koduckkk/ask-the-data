@@ -38,7 +38,7 @@ def _report_frame():
 @st.cache_data(show_spinner="Reading before/after examples…")
 def _examples():
     stories = Q.before_after_examples()
-    return [(s.defect, s.explanation, s.examples) for s in stories]
+    return [(s.defect, s.explanation, s.examples, s.function) for s in stories]
 
 
 @st.cache_data
@@ -88,6 +88,7 @@ st.markdown(
     "completely legitimate — only the *disagreement between two tables* exposes "
     "it. The participation code wins: a refusal scores **zero**."
 )
+st.code("reshape.zero_refused_scores()", language="python")
 refused = _refused()
 st.dataframe(refused, use_container_width=True, hide_index=True)
 st.caption(
@@ -98,11 +99,17 @@ st.caption(
 # --- before / after per defect -----------------------------------------------
 
 st.header("Before / after, by defect")
-st.caption("Real dirty values from the raw data, and exactly what the rule turns them into.")
+st.caption(
+    "Real dirty values from the raw data, and exactly what the rule turns them "
+    "into. Each transformation names the `clean.py` function that produced it — "
+    "every change traces to a named, tested rule you can open."
+)
 
-for defect, explanation, examples in _examples():
+for defect, explanation, examples, function in _examples():
     st.subheader(defect)
+    # The function chip is the QA hook: the reviewer can go read the exact rule.
     st.caption(explanation)
+    st.code(f"{function}()", language="python")
     st.dataframe(
         examples.rename(columns={"before": "Before (raw)", "after": "After (cleaned)"}),
         use_container_width=True,

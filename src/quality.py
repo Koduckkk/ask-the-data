@@ -23,11 +23,17 @@ from emit_warehouse import RAW_DIR
 
 @dataclass(frozen=True)
 class BeforeAfter:
-    """One defect's story: a few real dirty -> clean example rows."""
+    """One defect's story: a few real dirty -> clean example rows.
+
+    ``function`` names the actual ``clean.py`` rule that produced the "after"
+    column, so a reviewer can trace each transformation to its source — the QA
+    point of the page: every change attributable to a named, tested function.
+    """
 
     defect: str          # human name of the defect
     explanation: str     # one line: what the rule does and why
     examples: pd.DataFrame  # columns: before, after
+    function: str = ""   # e.g. "clean.repair_mojibake"
 
 
 def _pairs(raw: pd.Series, cleaned: pd.Series, limit: int = 5) -> pd.DataFrame:
@@ -51,118 +57,82 @@ def _pairs(raw: pd.Series, cleaned: pd.Series, limit: int = 5) -> pd.DataFrame:
     return frame.drop_duplicates().head(limit).reset_index(drop=True)
 
 
+def _qualname(fn) -> str:
+    """A short 'clean.<function>' reference for display, from the callable itself."""
+    return f"clean.{fn.__name__}"
+
+
 def before_after_examples(limit: int = 5) -> list[BeforeAfter]:
-    """Real dirty -> clean pairs for each defect, drawn from the raw data."""
+    """Real dirty -> clean pairs for each defect, drawn from the raw data.
+
+    Each story names the exact ``clean.py`` function that produced its "after"
+    column, derived from the callable so the reference can never drift from the
+    code that actually ran.
+    """
     students = pd.read_csv(RAW_DIR / "warehouse_students.csv", dtype=str)
     results = pd.read_csv(RAW_DIR / "warehouse_results.csv", dtype=str)
-    schools = pd.read_csv(RAW_DIR / "warehouse_schools.csv", dtype=str)
 
-    stories: list[BeforeAfter] = []
+    def story(defect, explanation, raw, fn, *args):
+        cleaned = fn(raw, *args)
+        return BeforeAfter(
+            defect, explanation, _pairs(raw, cleaned.astype("string"), limit), _qualname(fn)
+        )
 
-    # 1. Encoding corruption in names.
-    stories.append(
-        BeforeAfter(
+    stories = [
+        story(
             "Encoding corruption (mojibake)",
             "Double-encoded characters are repaired via lookup; lossy ones "
             "(reduced to '?') are left for the clean vendor name, not guessed.",
-            _pairs(students["family_name"], C.repair_mojibake(students["family_name"]), limit),
-        )
-    )
-
-    # 2. Placeholder text standing in for null.
-    stories.append(
-        BeforeAfter(
+            students["family_name"], C.repair_mojibake,
+        ),
+        story(
             "Placeholder text → null",
             "'N/A', '-', 'unknown' and friends become true nulls, so they stop "
             "being counted as real values.",
-            _pairs(students["given_name"], C.blank_placeholders(students["given_name"]), limit),
-        )
-    )
-
-    # 3. Junk characters in names.
-    stories.append(
-        BeforeAfter(
+            students["given_name"], C.blank_placeholders,
+        ),
+        story(
             "Junk characters stripped",
             "Characters that can't appear in a name are removed; apostrophes, "
             "hyphens and accents survive.",
-            _pairs(students["family_name"], C.strip_junk_characters(students["family_name"]), limit),
-        )
-    )
-
-    # 4. Coded values with many spellings.
-    stories.append(
-        BeforeAfter(
+            students["family_name"], C.strip_junk_characters,
+        ),
+        story(
             "Gender codes canonicalised",
             "M/F/X, Male/Female, 1/2 and blanks all map to a single canonical "
             "code, so a group-by doesn't split one category into five.",
-            _pairs(
-                students["gender_code"],
-                C.canonicalise_code(students["gender_code"], "gender"),
-                limit,
-            ),
-        )
-    )
-
-    # 5. Domain spelled many ways.
-    stories.append(
-        BeforeAfter(
+            students["gender_code"], C.canonicalise_code, "gender",
+        ),
+        story(
             "Domain names canonicalised",
             "NUM / Maths / numeracy / 'Numeracy ' all become 'Numeracy'.",
-            _pairs(
-                results["test_domain"],
-                C.canonicalise_code(results["test_domain"], "domain"),
-                limit,
-            ),
-        )
-    )
-
-    # 6. Numeric sentinels in the score column.
-    stories.append(
-        BeforeAfter(
+            results["test_domain"], C.canonicalise_code, "domain",
+        ),
+        story(
             "Score sentinels → null",
             "999 / -1 / 9999 are 'no score' codes, not marks — recoded to null "
             "before any average touches them.",
-            _pairs(
-                results["raw_score"],
-                C.recode_sentinels(results["raw_score"]).astype("string"),
-                limit,
-            ),
-        )
-    )
-
-    # 7. Mixed date formats.
-    stories.append(
-        BeforeAfter(
+            results["raw_score"], C.recode_sentinels,
+        ),
+        story(
             "Mixed date formats → ISO",
             "14/03/2016, 14-Mar-16 and 03/14/2016 are parsed day-first to one "
-            "ISO date.",
-            _pairs(students["birth_date"], C.parse_dates(students["birth_date"]), limit),
-        )
-    )
-
-    # 8. Numeric-looking year level.
-    stories.append(
-        BeforeAfter(
+            "ISO date; values already in ISO form pass through unchanged.",
+            students["birth_date"], C.parse_dates,
+        ),
+        story(
             "Year level unified",
             "'Year 9' and 9 are the same value; the digits are extracted so the "
             "join key is one clean integer.",
-            _pairs(
-                results["test_level"],
-                C.parse_year_level(results["test_level"]).astype("string"),
-                limit,
-            ),
-        )
-    )
-
-    # 9. Leading-zero id drift.
-    stories.append(
-        BeforeAfter(
+            results["test_level"], C.parse_year_level,
+        ),
+        story(
             "Identifier normalised for joining",
             "The warehouse stores local_id zero-padded ('0173501'); the vendor "
             "strips it. Both are normalised so the join lines up.",
-            _pairs(students["local_id"], C.normalise_id(students["local_id"]), limit),
-        )
-    )
+            students["local_id"], C.normalise_id,
+        ),
+    ]
 
     # Keep only stories that actually found examples.
     return [s for s in stories if not s.examples.empty]
@@ -208,7 +178,7 @@ def refused_but_attempted(limit: int = 5) -> pd.DataFrame:
 
 if __name__ == "__main__":
     for story in before_after_examples():
-        print(f"\n=== {story.defect} ===")
+        print(f"\n=== {story.defect}  [{story.function}()] ===")
         print(story.explanation)
         print(story.examples.to_string(index=False))
 

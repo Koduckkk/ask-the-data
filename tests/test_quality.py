@@ -40,6 +40,15 @@ def test_before_after_examples_are_real_and_nonempty():
         assert (s.examples["before"] != s.examples["after"]).all()
 
 
+def test_before_after_names_a_real_clean_function():
+    import clean as C
+
+    for s in Q.before_after_examples(limit=2):
+        assert s.function.startswith("clean.")
+        # The named function actually exists in clean.py.
+        assert hasattr(C, s.function.split(".", 1)[1])
+
+
 def test_refused_but_attempted_surfaces_the_contradiction():
     out = Q.refused_but_attempted(limit=5)
     assert not out.empty

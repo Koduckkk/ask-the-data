@@ -42,7 +42,23 @@ python src/generate_data.py --seed 7            # a different reproducible batch
 Everything is deterministic: the same arguments always produce the same files.
 The defect catalogue is in [docs/quirks.md](docs/quirks.md).
 
-Further steps (clean, load, query) are added as the pipeline is built.
+Then clean the data and load it into a small database:
+
+```bash
+python src/load.py                   # clean, reshape, load -> ask_the_data.duckdb
+```
+
+This applies every cleaning rule, folds in the wide vendor reshape, prints a
+report of exactly what it changed, and writes three clean tables to DuckDB plus
+an auto-generated [docs/schema.md](docs/schema.md). The cleaning is deterministic
+and tested — `pytest` covers every rule, including a reconciliation check that
+proves the vendor reshape reproduces the warehouse totals exactly.
+
+```bash
+pytest                               # 62 tests: dirty-in / clean-out per rule
+```
+
+Further steps (natural-language query layer) are added as the pipeline is built.
 
 ## Data
 

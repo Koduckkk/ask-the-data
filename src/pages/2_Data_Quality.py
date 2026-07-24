@@ -79,6 +79,20 @@ with st.expander("Full cleaning report (every rule)"):
         hide_index=True,
     )
 
+# --- LLM narrative of the same report ----------------------------------------
+# The AI only phrases the real counts above; the deterministic report is the
+# source of truth. Live with a key, a labelled demo summary of the same figures
+# without one — the same pattern the query page uses.
+
+summary, summary_mode = Q.summarise_report(report)
+label = "AI summary" if summary_mode == "llm" else "AI summary (demo — pre-written from the same counts)"
+st.info(f"**{label}**\n\n{summary}")
+st.caption(
+    "The AI only phrases the deterministic counts above — it never counts or "
+    "estimates. With an API key this is generated live; without one, a "
+    "pre-written summary of the same real figures is shown."
+)
+
 # --- the signature defect ----------------------------------------------------
 
 st.header("The one no single file reveals")

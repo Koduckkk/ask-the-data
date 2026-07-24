@@ -176,6 +176,90 @@ def refused_but_attempted(limit: int = 5) -> pd.DataFrame:
     return out
 
 
+# --- LLM narrative of the cleaning report ------------------------------------
+#
+# The LLM narrates; it never counts. The real per-rule figures come from the
+# deterministic cleaning report and are passed in — the model only phrases them.
+# This mirrors the NL->SQL design: the AI transforms, the facts stay verifiable,
+# and the raw report is shown alongside. With a key the summary is generated
+# live; without one, a pre-written summary of the *same real numbers* is shown,
+# clearly labelled — the same demo-mode pattern the query page uses.
+
+MODEL = "claude-opus-4-8"
+
+_SUMMARY_SYSTEM = """You write a short executive summary of a data-cleaning run \
+for a non-technical reader. You are given the exact per-rule counts of what the \
+pipeline changed. Rules:
+- Use ONLY the numbers provided. Never invent, estimate, or total figures \
+yourself beyond what is given.
+- 3-4 sentences. Lead with the scale and the largest category of fixes.
+- Explain in plain terms why a couple of the fixes matter (e.g. sentinels would \
+skew averages; code variants would split a group-by).
+- No preamble, no bullet points, no markdown."""
+
+
+def _report_lines(report_frame: pd.DataFrame) -> str:
+    """The per-rule counts as compact text for the prompt (and demo grounding)."""
+    agg = report_frame.groupby("rule")["changed"].sum().sort_values(ascending=False)
+    lines = [f"{rule}: {n:,}" for rule, n in agg.items() if n > 0]
+    lines.append(f"total values changed: {int(report_frame['changed'].sum()):,}")
+    return "\n".join(lines)
+
+
+def _demo_summary(report_frame: pd.DataFrame) -> str:
+    """A pre-written summary grounded on the real counts (keyless fallback).
+
+    Not a fabricated stand-in: it states the same figures the deterministic
+    report computed, so it is accurate even though it wasn't generated live.
+    """
+    agg = report_frame.groupby("rule")["changed"].sum().sort_values(ascending=False)
+    total = int(report_frame["changed"].sum())
+    top_rule, top_n = agg.index[0], int(agg.iloc[0])
+    sentinels = int(agg.get("recode_sentinels", 0))
+    refused = int(agg.get("zero_refused_scores", 0))
+    return (
+        f"The pipeline changed {total:,} values across the raw sources. The "
+        f"largest category was standardising inconsistent coded values "
+        f"({top_rule.replace('_', ' ')}, {top_n:,} values) — spellings like "
+        f"'NUM', 'Maths' and 'numeracy' that would otherwise split a single "
+        f"group into several. It also recoded {sentinels:,} sentinel scores "
+        f"(999, -1) that would have skewed every average that touched them, and "
+        f"overrode {refused:,} refused-but-scored records to zero using the "
+        f"authoritative participation code. Every change is attributable to a "
+        f"named, tested rule."
+    )
+
+
+def summarise_report(report_frame: pd.DataFrame, mode: str | None = None) -> tuple[str, str]:
+    """A narrative summary of the cleaning report. Returns (summary, mode).
+
+    ``mode`` is resolved the same way as the query layer: live LLM when a key is
+    present, otherwise a pre-written demo summary of the same real figures.
+    """
+    import nl_query  # reuse the shared mode resolution
+
+    mode = mode or nl_query.resolve_mode()
+    if mode == "demo":
+        return _demo_summary(report_frame), "demo"
+
+    import anthropic
+
+    client = anthropic.Anthropic()
+    message = client.messages.create(
+        model=MODEL,
+        max_tokens=400,
+        system=_SUMMARY_SYSTEM,
+        messages=[
+            {
+                "role": "user",
+                "content": f"Cleaning report counts:\n\n{_report_lines(report_frame)}",
+            }
+        ],
+    )
+    text = "".join(b.text for b in message.content if b.type == "text").strip()
+    return text, "llm"
+
+
 if __name__ == "__main__":
     for story in before_after_examples():
         print(f"\n=== {story.defect}  [{story.function}()] ===")

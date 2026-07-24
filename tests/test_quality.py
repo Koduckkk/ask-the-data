@@ -68,6 +68,40 @@ def test_iso_dates_are_not_mangled():
     assert list(out) == ["2016-10-08", "2016-03-14"]
 
 
+# --- LLM report summary (demo path — no key needed) --------------------------
+
+
+def test_demo_summary_is_grounded_on_real_counts(monkeypatch):
+    # The key property: the demo summary states the ACTUAL report totals, not a
+    # fabricated placeholder. Feed a known report and assert the numbers appear.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ASK_THE_DATA_MODE", raising=False)
+    report = pd.DataFrame(
+        {
+            "rule": ["canonicalise_code", "recode_sentinels", "zero_refused_scores"],
+            "column": ["domain", "raw_score", "raw_score"],
+            "changed": [1000, 50, 7],
+            "detail": ["", "", ""],
+        }
+    )
+    summary, mode = Q.summarise_report(report)
+    assert mode == "demo"
+    # The real figures — total and the specific counts — appear verbatim.
+    assert "1,057" in summary   # total 1000 + 50 + 7
+    assert "1,000" in summary   # largest category
+    assert "50" in summary and "7" in summary
+
+
+def test_summarise_report_uses_query_mode(monkeypatch):
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-x")
+    monkeypatch.setenv("ASK_THE_DATA_MODE", "demo")  # forced demo overrides key
+    report = pd.DataFrame(
+        {"rule": ["canonicalise_code"], "column": ["d"], "changed": [5], "detail": [""]}
+    )
+    _summary, mode = Q.summarise_report(report)
+    assert mode == "demo"
+
+
 def test_regional_dates_still_parse_day_first():
     out = C.parse_dates(pd.Series(["14/03/2016", "03/04/2016", "14-Mar-16"]))
     assert list(out) == ["2016-03-14", "2016-04-03", "2016-03-14"]

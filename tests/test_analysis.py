@@ -44,6 +44,14 @@ def test_fit_2pl_returns_one_param_per_item():
     assert (result.items["discrimination"] > 0).all()
 
 
+def test_fit_2pl_returns_one_ability_per_student():
+    # The person side: one estimated ability per student, standardised near 0.
+    result = A.fit_2pl(3, "Numeracy")
+    assert result.ability.shape == (result.n_persons,)
+    assert abs(result.ability.mean()) < 0.5   # IRT ability scale is centred
+    assert result.ability.std() > 0           # genuine spread, not constant
+
+
 def test_available_fits_cover_the_item_domains():
     fits = A.available_fits()
     domains = {d for _yl, d in fits}

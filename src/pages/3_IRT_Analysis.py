@@ -57,11 +57,11 @@ st.caption(
 @st.cache_data(show_spinner="Fitting the 2PL model…")
 def _fit(year_level: int, domain: str):
     r = A.fit_2pl(year_level, domain)
-    return r.items, r.n_persons, r.aic, r.bic
+    return r.items, r.ability, r.n_persons, r.aic, r.bic
 
 
 if st.button("Fit the 2PL model", type="primary"):
-    items, n_persons, aic, bic = _fit(year_level, domain)
+    items, ability, n_persons, aic, bic = _fit(year_level, domain)
 
     st.subheader(f"Item parameters — Year {year_level} {domain}")
     st.caption(
@@ -102,3 +102,41 @@ if st.button("Fit the 2PL model", type="primary"):
         "would spread, and this same workflow would reveal which items are hard "
         "and which discriminate well."
     )
+
+    # --- the person side: estimated ability (theta) --------------------------
+
+    st.subheader("Person ability")
+    st.markdown(
+        "The 2PL model returns **two things**: the item parameters above, and "
+        "each student's **latent ability (θ)** — recovered purely from their "
+        "answer pattern. With thousands of students, the distribution is what "
+        "matters, not the individual list."
+    )
+
+    import numpy as np
+    import pandas as pd
+
+    a1, a2, a3 = st.columns(3)
+    a1.metric("Mean ability", f"{ability.mean():.2f}")
+    a2.metric("Std. dev.", f"{ability.std():.2f}")
+    a3.metric("Range", f"{ability.min():.2f} to {ability.max():.2f}")
+
+    # Distribution as a histogram (binned counts), not a 12k-row dump.
+    counts, edges = np.histogram(ability, bins=30)
+    hist = pd.DataFrame(
+        {"ability": np.round((edges[:-1] + edges[1:]) / 2, 2), "students": counts}
+    ).set_index("ability")
+    st.bar_chart(hist)
+    st.caption(
+        "Ability is centred near 0 and roughly bell-shaped — the IRT scale is "
+        "standardised, so θ = 0 is an average student and ±1 is roughly a "
+        "standard deviation of skill."
+    )
+
+    with st.expander("A few individual ability estimates"):
+        sample = pd.DataFrame(
+            {"student (sample)": [f"student {i + 1}" for i in range(8)],
+             "ability (θ)": np.round(ability[:8], 3)}
+        )
+        st.dataframe(sample, use_container_width=True, hide_index=True)
+        st.caption("Eight of thousands — shown only to make the per-student estimate concrete.")

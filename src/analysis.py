@@ -61,7 +61,8 @@ class IRTResult:
 
     domain: str
     year_level: int
-    items: pd.DataFrame     # columns: item, difficulty, discrimination
+    items: pd.DataFrame       # columns: item, difficulty, discrimination
+    ability: np.ndarray       # one estimated latent ability (theta) per student
     n_persons: int
     aic: float
     bic: float
@@ -104,10 +105,16 @@ def fit_2pl(year_level: int, domain: str) -> IRTResult:
             "discrimination": np.round(fit["Discrimination"], 3),
         }
     )
+    # Person ability (theta): the model's estimate of each student's latent
+    # skill, recovered from their answer pattern alone. One value per student —
+    # the person side of the IRT output, complementing the item side above.
+    ability = np.asarray(fit["Ability"], dtype=float)
+
     return IRTResult(
         domain=domain,
         year_level=year_level,
         items=items,
+        ability=ability,
         n_persons=responses.shape[0],
         # girth returns AIC/BIC as dicts keyed by 'final'/'null'/'delta'.
         aic=round(float(fit["AIC"]["final"]), 1),
@@ -124,5 +131,9 @@ if __name__ == "__main__":
     result = fit_2pl(3, "Numeracy")
     print(f"2PL fit — Year {result.year_level} {result.domain} "
           f"({result.n_persons:,} students)")
+    print("\nItem parameters:")
     print(result.items.to_string(index=False))
+    ab = result.ability
+    print(f"\nPerson ability (theta): {len(ab):,} students, "
+          f"mean {ab.mean():.2f}, range {ab.min():.2f} to {ab.max():.2f}")
     print(f"\nAIC {result.aic}   BIC {result.bic}")

@@ -65,10 +65,33 @@ PROFICIENCY_CUT_OFFSETS = (60.0, 110.0, 165.0, 215.0)
 # different in Year 3 and Year 9.
 SCALE_SPAN = 260.0
 
+# Per-domain profile: real assessment domains do not sit on one shared scale or
+# have one shared difficulty. Each domain gets its own scale offset (so a scaled
+# score means something different across domains) and its own mean difficulty (so
+# "average score by domain" actually varies). Values are deliberate, not random,
+# so the corpus stays reproducible.
+#   scale_offset: added to the domain's scaled-score floor (points)
+#   difficulty:   shift to the mean proportion-correct (+ easier, - harder)
+DOMAIN_PROFILE = {
+    "Reading":                 {"scale_offset":  15.0, "difficulty":  0.04},
+    "Numeracy":                {"scale_offset":  35.0, "difficulty":  0.02},
+    "Spelling":                {"scale_offset":   0.0, "difficulty":  0.08},
+    "Grammar and Punctuation": {"scale_offset": -10.0, "difficulty": -0.02},
+    "Writing":                 {"scale_offset": -30.0, "difficulty": -0.06},
+}
 
-def scale_floor(year_level: int) -> float:
-    """Bottom of the scaled-score range for a year level."""
-    return 250.0 + (year_level - 3) * 45.0
+
+def scale_floor(year_level: int, domain: str | None = None) -> float:
+    """Bottom of the scaled-score range for a year level (and optional domain).
+
+    Passing a domain shifts the floor by that domain's scale offset, so the same
+    raw score maps to a different scaled score across domains — as it does in a
+    real assessment, where domain scales are not interchangeable.
+    """
+    base = 250.0 + (year_level - 3) * 45.0
+    if domain is None:
+        return base
+    return base + DOMAIN_PROFILE[domain]["scale_offset"]
 
 
 def _logistic(p: float, steepness: float = 6.0) -> float:
@@ -130,9 +153,11 @@ def build_score_map(year_levels=YEAR_LEVELS) -> pd.DataFrame:
     """
     rows = []
     for year_level in year_levels:
-        floor = scale_floor(year_level)
         span = SCALE_SPAN
         for domain, max_raw in MAX_RAW_SCORE.items():
+            # Each domain sits on its own scale (via the domain-aware floor), so
+            # the same raw score maps to a different scaled score per domain.
+            floor = scale_floor(year_level, domain)
             # Logistic curve, rescaled so raw 0 maps to the floor and max raw
             # maps to floor + span exactly.
             lo, hi = _logistic(0.0), _logistic(1.0)
@@ -321,8 +346,14 @@ def _build_results(
     )
     max_raw = results["domain"].map(MAX_RAW_SCORE).to_numpy()
     z = ability.reindex(results["student_id"]).to_numpy() + rng.normal(0, 0.6, size=n)
-    # Squash the latent ability onto [0, 1] and scale to the domain's item count.
-    proportion = np.clip(0.5 + z * 0.18, 0.02, 0.98)
+    # Each domain has its own mean difficulty, so cohorts genuinely score
+    # differently across domains rather than identically.
+    difficulty = results["domain"].map(
+        lambda d: DOMAIN_PROFILE[d]["difficulty"]
+    ).to_numpy()
+    # Squash the latent ability onto [0, 1], shifted by domain difficulty, and
+    # scale to the domain's item count.
+    proportion = np.clip(0.5 + z * 0.18 + difficulty, 0.02, 0.98)
     results["raw_score"] = np.rint(proportion * max_raw).astype(int)
 
     # Scaled score comes from the lookup — never recomputed independently.

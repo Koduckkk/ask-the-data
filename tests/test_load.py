@@ -45,6 +45,20 @@ def test_no_sentinels_survive(db):
     assert n == 0
 
 
+def test_domains_have_distinct_score_distributions(db):
+    # Domains sit on their own scales, so average scaled score genuinely varies
+    # across them — not five identical bars. Guards against regressing to a
+    # single shared scale.
+    means = db.execute(
+        """
+        SELECT domain, AVG(scaled_score) FROM results
+        WHERE scaled_score IS NOT NULL GROUP BY domain
+        """
+    ).fetchall()
+    values = sorted(m[1] for m in means)
+    assert values[-1] - values[0] > 40  # a real spread, not near-identical
+
+
 def test_year_level_is_clean_integer(db):
     levels = {r[0] for r in db.execute("SELECT DISTINCT year_level FROM results").fetchall()}
     assert levels == {3, 5, 7, 9}

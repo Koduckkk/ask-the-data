@@ -121,16 +121,21 @@ if st.button("Fit the 2PL model", type="primary"):
     a2.metric("Std. dev.", f"{ability.std():.2f}")
     a3.metric("Range", f"{ability.min():.2f} to {ability.max():.2f}")
 
-    # Distribution as a histogram (binned counts), not a 12k-row dump.
-    counts, edges = np.histogram(ability, bins=30)
+    # Ability clusters around the k+1 possible raw-score levels (a k-item test
+    # has k+1 raw totals). Binning to about that many bins lands one cluster per
+    # bar with no empty gaps; asking for more bins just subdivides the empty
+    # space between clusters and looks sparse. Honest, not smoothed.
+    counts, edges = np.histogram(ability, bins=len(items) + 1)
     hist = pd.DataFrame(
         {"ability": np.round((edges[:-1] + edges[1:]) / 2, 2), "students": counts}
     ).set_index("ability")
     st.bar_chart(hist)
     st.caption(
-        "Ability is centred near 0 and roughly bell-shaped — the IRT scale is "
-        "standardised, so θ = 0 is an average student and ±1 is roughly a "
-        "standard deviation of skill."
+        f"Ability is centred near 0 and standardised (θ = 0 is an average "
+        f"student, ±1 ≈ one standard deviation of skill). With {len(items)} "
+        f"items, a student's raw score can only take {len(items) + 1} values, "
+        f"so ability resolves to about that many distinct levels — a longer "
+        f"test would give a smoother, finer-grained distribution."
     )
 
     with st.expander("A few individual ability estimates"):

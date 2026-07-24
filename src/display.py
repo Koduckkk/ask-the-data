@@ -65,6 +65,11 @@ def chart_frame(frame: pd.DataFrame, spec: ChartSpec) -> pd.DataFrame:
     """
     keep = frame[[spec.label, spec.value]].copy()
     keep = keep[keep[spec.label].notna()]
+    # A bar chart reads as a ranking, so sort by value. Horizontal bars render
+    # bottom-to-top, so ascending puts the largest at the top. A line chart keeps
+    # its natural (ordinal) order — sorting a trend by value would scramble it.
+    if spec.kind == "bar":
+        keep = keep.sort_values(spec.value, ascending=True)
     keep = keep.rename(columns={spec.label: humanise(spec.label), spec.value: humanise(spec.value)})
     return keep.set_index(humanise(spec.label))
 

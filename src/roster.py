@@ -317,6 +317,7 @@ def _build_results(
     students: pd.DataFrame,
     score_map: pd.DataFrame,
     test_year: int,
+    school_effect: pd.Series,
 ) -> pd.DataFrame:
     """One row per (student, domain) — the assessment results themselves.
 
@@ -345,7 +346,14 @@ def _build_results(
         rng.normal(0, 1, size=len(students)), index=students["student_id"]
     )
     max_raw = results["domain"].map(MAX_RAW_SCORE).to_numpy()
-    z = ability.reindex(results["student_id"]).to_numpy() + rng.normal(0, 0.6, size=n)
+    # School effect: students at the same school share a small ability shift, so
+    # school-level averages genuinely differ and "top schools" is a real ranking.
+    school_shift = results["school_id"].map(school_effect).fillna(0.0).to_numpy()
+    z = (
+        ability.reindex(results["student_id"]).to_numpy()
+        + school_shift
+        + rng.normal(0, 0.6, size=n)
+    )
     # Each domain has its own mean difficulty, so cohorts genuinely score
     # differently across domains rather than identically.
     difficulty = results["domain"].map(
@@ -385,8 +393,14 @@ def build_roster(seed: int = SEED, test_year: int = TEST_YEAR) -> Roster:
     rng = np.random.default_rng(seed + test_year)
     schools = _build_schools(rng)
     students = _build_students(rng, schools)
+    # A per-school ability effect, so schools genuinely differ (catchment,
+    # resourcing) rather than each being an identical sample of one population.
+    # Keyed by school id; deterministic under the seed.
+    school_effect = pd.Series(
+        rng.normal(0, 0.7, size=len(schools)), index=schools["school_id"].to_numpy()
+    )
     score_map = build_score_map()
-    results = _build_results(rng, students, score_map, test_year)
+    results = _build_results(rng, students, score_map, test_year, school_effect)
     return Roster(
         students=students, schools=schools, results=results, score_map=score_map
     )

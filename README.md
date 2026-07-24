@@ -66,12 +66,18 @@ streamlit run src/app.py             # text box, results, and the SQL beside the
 python src/nl_query.py "average writing score by year level"
 ```
 
-The app has two pages. The query page answers questions; the **Data Quality**
-page makes the cleaning visible — the raw dirty values next to their cleaned
-form for each defect, a count of every change the pipeline made, and the
-cross-table "refused but attempted" contradiction that no single file reveals.
-That page is the point of the project made tangible: real messy assessment data
-and the judgement that cleans it.
+The app has three pages:
+
+- **Query** — ask questions, see the SQL beside the results.
+- **Data Quality** — the cleaning made visible: raw dirty values next to their
+  cleaned form for each defect (each labelled with the `clean.py` function that
+  produced it), a count of every change, and the cross-table "refused but
+  attempted" contradiction that no single file reveals.
+- **IRT Analysis** — a methodology demonstration: real assessment scaled scores
+  come from Item Response Theory, so this page fits a 2-parameter logistic (2PL)
+  IRT model to the item-level responses and shows the estimated item difficulty
+  and discrimination. Framed honestly — the data is synthetic, so it demonstrates
+  the *workflow*, not real-world insight.
 
 With no API key this runs in **demo mode** — a set of canned questions — so the
 whole pipeline is runnable without one. Set `ANTHROPIC_API_KEY` (copy

@@ -4,3 +4,4 @@ duckdb>=0.10
 anthropic>=0.40
 pytest>=8.0
 streamlit>=1.30
+girth>=0.8

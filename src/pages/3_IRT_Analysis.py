@@ -117,9 +117,14 @@ if st.button("Fit the 2PL model", type="primary"):
     import pandas as pd
 
     a1, a2, a3 = st.columns(3)
-    a1.metric("Mean ability", f"{ability.mean():.2f}")
-    a2.metric("Std. dev.", f"{ability.std():.2f}")
-    a3.metric("Range", f"{ability.min():.2f} to {ability.max():.2f}")
+    def _fmt(x: float) -> str:
+        # A tiny negative mean rounds to "-0.00", which reads as a glitch. The
+        # `+ 0.0` collapses negative zero to positive zero after rounding.
+        return f"{round(float(x), 2) + 0.0:.2f}"
+
+    a1.metric("Mean ability", _fmt(ability.mean()))
+    a2.metric("Std. dev.", _fmt(ability.std()))
+    a3.metric("Range", f"{_fmt(ability.min())} to {_fmt(ability.max())}")
 
     # Ability clusters around the k+1 possible raw-score levels (a k-item test
     # has k+1 raw totals). Binning to about that many bins lands one cluster per

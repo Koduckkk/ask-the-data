@@ -138,14 +138,24 @@ if st.button("Fit the 2PL model", type="primary"):
         f"test would give a smoother, finer-grained distribution."
     )
 
-    with st.expander("A few individual ability estimates"):
+    with st.expander("A few individual ability estimates, ranked"):
+        # Sort all students by ability, then pick 8 evenly spanning the range —
+        # highest down to lowest — so the sample reads as a ranking and shows
+        # the full span, not just the top slice.
+        order = np.argsort(ability)[::-1]  # descending
+        n_show = min(8, len(order))
+        picks = order[np.linspace(0, len(order) - 1, n_show).astype(int)]
         sample = pd.DataFrame(
-            {"PSI (student id)": student_ids[:8],
-             "ability (θ)": np.round(ability[:8], 3)}
+            {
+                "rank": [f"{p + 1:,} of {len(order):,}" for p in
+                         np.linspace(0, len(order) - 1, n_show).astype(int)],
+                "PSI (student id)": student_ids[picks],
+                "ability (θ)": np.round(ability[picks], 3),
+            }
         )
         st.dataframe(sample, use_container_width=True, hide_index=True)
         st.caption(
-            "Eight real students, by their platform id (PSI) — the same id that "
-            "threads through the whole pipeline. Shown only to make the "
-            "per-student estimate concrete."
+            "Real students by platform id (PSI) — the same id that threads "
+            "through the whole pipeline — sampled evenly from highest to lowest "
+            "ability to show the full range, not just the top."
         )

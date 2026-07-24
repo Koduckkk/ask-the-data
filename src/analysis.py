@@ -63,6 +63,7 @@ class IRTResult:
     year_level: int
     items: pd.DataFrame       # columns: item, difficulty, discrimination
     ability: np.ndarray       # one estimated latent ability (theta) per student
+    student_ids: np.ndarray   # the PSI for each ability, same order
     n_persons: int
     aic: float
     bic: float
@@ -81,7 +82,11 @@ def _response_matrix(year_level: int, domain: str) -> pd.DataFrame:
     cols = [c for c in vendor.columns if _domain_of(c) == domain]
     matrix = vendor[cols].replace(NOT_ATTEMPTED, 0).astype(int)
     matrix.columns = cols
-    return matrix.reset_index(drop=True)
+    # Index by the real student id (PSI). Row order carries through the fit, so
+    # ability[i] corresponds to this index's i-th student — real ids, not
+    # "student 1, 2, 3".
+    matrix.index = vendor["PlatformId"].to_numpy()
+    return matrix
 
 
 def fit_2pl(year_level: int, domain: str) -> IRTResult:
@@ -115,6 +120,7 @@ def fit_2pl(year_level: int, domain: str) -> IRTResult:
         year_level=year_level,
         items=items,
         ability=ability,
+        student_ids=responses.index.to_numpy(),  # PSI per ability, same order
         n_persons=responses.shape[0],
         # girth returns AIC/BIC as dicts keyed by 'final'/'null'/'delta'.
         aic=round(float(fit["AIC"]["final"]), 1),
@@ -136,4 +142,7 @@ if __name__ == "__main__":
     ab = result.ability
     print(f"\nPerson ability (theta): {len(ab):,} students, "
           f"mean {ab.mean():.2f}, range {ab.min():.2f} to {ab.max():.2f}")
+    print("  sample:", ", ".join(
+        f"{psi}={t:.2f}" for psi, t in zip(result.student_ids[:3], ab[:3])
+    ))
     print(f"\nAIC {result.aic}   BIC {result.bic}")

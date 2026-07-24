@@ -57,11 +57,11 @@ st.caption(
 @st.cache_data(show_spinner="Fitting the 2PL model…")
 def _fit(year_level: int, domain: str):
     r = A.fit_2pl(year_level, domain)
-    return r.items, r.ability, r.n_persons, r.aic, r.bic
+    return r.items, r.ability, r.student_ids, r.n_persons, r.aic, r.bic
 
 
 if st.button("Fit the 2PL model", type="primary"):
-    items, ability, n_persons, aic, bic = _fit(year_level, domain)
+    items, ability, student_ids, n_persons, aic, bic = _fit(year_level, domain)
 
     st.subheader(f"Item parameters — Year {year_level} {domain}")
     st.caption(
@@ -140,8 +140,12 @@ if st.button("Fit the 2PL model", type="primary"):
 
     with st.expander("A few individual ability estimates"):
         sample = pd.DataFrame(
-            {"student (sample)": [f"student {i + 1}" for i in range(8)],
+            {"PSI (student id)": student_ids[:8],
              "ability (θ)": np.round(ability[:8], 3)}
         )
         st.dataframe(sample, use_container_width=True, hide_index=True)
-        st.caption("Eight of thousands — shown only to make the per-student estimate concrete.")
+        st.caption(
+            "Eight real students, by their platform id (PSI) — the same id that "
+            "threads through the whole pipeline. Shown only to make the "
+            "per-student estimate concrete."
+        )

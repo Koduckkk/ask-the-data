@@ -52,6 +52,14 @@ def test_fit_2pl_returns_one_ability_per_student():
     assert result.ability.std() > 0           # genuine spread, not constant
 
 
+def test_ability_carries_real_student_ids():
+    # Each ability is tied to a real PSI, same order — not "student 1, 2, 3".
+    result = A.fit_2pl(3, "Numeracy")
+    assert len(result.student_ids) == len(result.ability)
+    # PSIs are the vendor's letter+digits+letter form.
+    assert all(isinstance(s, str) and len(s) >= 10 for s in result.student_ids[:5])
+
+
 def test_available_fits_cover_the_item_domains():
     fits = A.available_fits()
     domains = {d for _yl, d in fits}

@@ -266,6 +266,14 @@ def _build_students(rng: np.random.Generator, schools: pd.DataFrame) -> pd.DataF
     """One row per student, spread across year levels."""
     real_ids = schools.loc[schools["is_real_school"], "school_id"].to_numpy()
 
+    # Schools vary in size — most students are at a handful of large schools, and
+    # a long tail of small schools has only a few. A uniform assignment made
+    # every school ~equal, which is unrealistic and, more importantly, left no
+    # small-n schools for the statistical layer to flag as unreliable. A
+    # Pareto-shaped weight gives that realistic spread.
+    weights = rng.pareto(1.5, size=len(real_ids)) + 0.02
+    weights = weights / weights.sum()
+
     frames = []
     for year_level in YEAR_LEVELS:
         n = STUDENTS_PER_YEAR_LEVEL
@@ -278,7 +286,7 @@ def _build_students(rng: np.random.Generator, schools: pd.DataFrame) -> pd.DataF
                     "student_id": _make_student_ids(rng, n),
                     "enrolment_id": _make_enrolment_ids(rng, n),
                     "year_level": year_level,
-                    "school_id": rng.choice(real_ids, size=n),
+                    "school_id": rng.choice(real_ids, size=n, p=weights),
                     "family_name": rng.choice(_FAMILY_NAMES, size=n),
                     "given_name": rng.choice(_GIVEN_NAMES, size=n),
                     "middle_name": rng.choice(_MIDDLE_NAMES, size=n),

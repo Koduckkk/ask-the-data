@@ -76,8 +76,14 @@ The app has three pages:
 - **IRT Analysis** — a methodology demonstration: real assessment scaled scores
   come from Item Response Theory, so this page fits a 2-parameter logistic (2PL)
   IRT model to the item-level responses and shows the estimated item difficulty
-  and discrimination. Framed honestly — the data is synthetic, so it demonstrates
-  the *workflow*, not real-world insight.
+  and discrimination, plus each student's latent ability. Framed honestly — the
+  data is synthetic, so it demonstrates the *workflow*, not real-world insight.
+- **Statistical Insights** — the inference layer: is a gender gap real or noise?
+  (a difference with a 95% confidence interval and a plain-English verdict);
+  school rankings that report each average's standard error and **withhold**
+  small-sample schools as unreliable rather than ranking them on noise; and a
+  note connecting a cleaning step to its inferential consequence — skipping the
+  sentinel recode biases the mean by ~125 points.
 
 With no API key this runs in **demo mode** — a set of canned questions — so the
 whole pipeline is runnable without one. Set `ANTHROPIC_API_KEY` (copy

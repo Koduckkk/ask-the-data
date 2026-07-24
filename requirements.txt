@@ -5,3 +5,4 @@ anthropic>=0.40
 pytest>=8.0
 streamlit>=1.30
 girth>=0.8
+scipy>=1.10

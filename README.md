@@ -77,12 +77,16 @@ underpins it all:
   by their unreliability — the principled version of a hard n-cutoff), and
   **marker-anomaly detection** that flags harsh/lenient markers after controlling
   for student ability via their other-domain scores, ranked as a review queue
-  ("give me the top N markers to investigate").
+  ("give me the top N markers to investigate"). A collapsible *how this works*
+  explains the shrinkage weight and the marker residual in both plain English
+  and formulas.
 - **IRT Analysis** — a methodology demonstration: real assessment scaled scores
   come from Item Response Theory, so this page fits a 2-parameter logistic (2PL)
   IRT model to the item-level responses and shows the estimated item difficulty
-  and discrimination, plus each student's latent ability. Framed honestly — the
-  data is synthetic, so it demonstrates the *workflow*, not real-world insight.
+  and discrimination, plus each student's latent ability. A collapsible *how this
+  works* covers the 2PL curve and why 2PL over 1PL — for technical and
+  non-technical readers alike. Framed honestly — the data is synthetic, so it
+  demonstrates the *workflow*, not real-world insight.
 - **Statistical Insights** — the inference layer: is a gender gap real or noise?
   (a difference with a 95% confidence interval and a plain-English verdict), and a
   note connecting a cleaning step to its inferential consequence — skipping the

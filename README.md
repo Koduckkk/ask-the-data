@@ -71,8 +71,10 @@ The app has three pages:
 - **Query** — ask questions, see the SQL beside the results.
 - **Data Quality** — the cleaning made visible: raw dirty values next to their
   cleaned form for each defect (each labelled with the `clean.py` function that
-  produced it), a count of every change, and the cross-table "refused but
-  attempted" contradiction that no single file reveals.
+  produced it), a count of every change, the cross-table "refused but attempted"
+  contradiction that no single file reveals, and a **schema-drift detector** that
+  catches a source renaming its id column between years and suggests the remap by
+  value overlap (proposing, never silently re-joining on a guessed key).
 - **IRT Analysis** — a methodology demonstration: real assessment scaled scores
   come from Item Response Theory, so this page fits a 2-parameter logistic (2PL)
   IRT model to the item-level responses and shows the estimated item difficulty

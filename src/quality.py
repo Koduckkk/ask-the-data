@@ -260,6 +260,35 @@ def summarise_report(report_frame: pd.DataFrame, mode: str | None = None) -> tup
     return text, "llm"
 
 
+def schema_drift_demo() -> tuple[str, str | None, pd.DataFrame]:
+    """Demonstrate drift detection on a real column renamed as if next year.
+
+    Takes the participation feed, renames its id column the way a real feed might
+    between years, and shows the detector suggesting the remap by value overlap.
+    Returns (renamed_column, suggestion, ranked-candidates frame).
+    """
+    import schema_match as SM
+
+    results = pd.read_csv(RAW_DIR / "warehouse_results.csv", dtype=str)
+    reference = results["STUDENT_KEY"]
+
+    part = pd.read_csv(RAW_DIR / "warehouse_participation.csv", dtype=str)
+    renamed = "student_platform_ref"  # a plausible next-year rename
+    part = part.rename(columns={"platform_student_id": renamed})
+
+    report = SM.detect_drift(part, "student_id", "platform_student_id", reference)
+    scores = pd.DataFrame(
+        {
+            "column": [s.candidate for s in report.scores],
+            "name similarity": [s.name_similarity for s in report.scores],
+            "value overlap": [s.value_overlap for s in report.scores],
+            "format match": [s.format_match for s in report.scores],
+            "combined": [s.combined for s in report.scores],
+        }
+    )
+    return renamed, report.suggestion, scores
+
+
 if __name__ == "__main__":
     for story in before_after_examples():
         print(f"\n=== {story.defect}  [{story.function}()] ===")

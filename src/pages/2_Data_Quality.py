@@ -129,3 +129,49 @@ for defect, explanation, examples, function in _examples():
         use_container_width=True,
         hide_index=True,
     )
+
+# --- schema drift detection --------------------------------------------------
+
+st.header("When a source renames a column")
+st.markdown(
+    "The pipeline maps each source's id column to `student_id` with a hardcoded "
+    "rule — correct and auditable, but it breaks silently if a feed **renames** "
+    "the column between years (`platform_student_id` one year, something else "
+    "the next). This detector catches that: it scores every column by name "
+    "similarity, **value overlap** (do the same students appear?), and value "
+    "format, and **suggests** the remap for a human to confirm — it proposes, it "
+    "never silently re-joins on a guessed key."
+)
+
+
+@st.cache_data
+def _drift():
+    return Q.schema_drift_demo()
+
+
+renamed, suggestion, scores = _drift()
+st.caption(
+    f"Simulating next year: the participation feed's id column has been renamed "
+    f"to `{renamed}`. The expected `platform_student_id` is gone — so the "
+    f"detector looks for its replacement."
+)
+if suggestion:
+    st.success(
+        f"**Suggested remap:** `{suggestion}` → `student_id` — confirmed by value "
+        f"overlap, even though the name barely matches. A human confirms before "
+        f"it becomes a rule.",
+        icon="🔎",
+    )
+st.dataframe(
+    scores.style.format(
+        {"name similarity": "{:.2f}", "value overlap": "{:.2f}",
+         "format match": "{:.0f}", "combined": "{:.2f}"}
+    ),
+    use_container_width=True,
+    hide_index=True,
+)
+st.caption(
+    "Value overlap is the dominant signal: the renamed column wins on a perfect "
+    "overlap with the known ids, while the name alone would not have found it. "
+    "The data is the evidence, not the label."
+)

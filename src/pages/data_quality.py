@@ -23,8 +23,7 @@ st.title("🧹 Data Quality")
 st.caption(
     "The raw data arrives messy. This page shows exactly what the cleaning "
     "pipeline does about it — real dirty records, their cleaned form, and a "
-    "count of every change. All synthetic; the defect catalogue is in "
-    "`docs/quirks.md`."
+    "count of every change. The defect catalogue is in `docs/quirks.md`."
 )
 
 

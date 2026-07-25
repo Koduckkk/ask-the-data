@@ -23,8 +23,7 @@ st.title("🚩 Anomaly Detection")
 st.caption(
     "Not 'what is the number' but 'what looks wrong and needs investigating'. "
     "School effects with sample-size skepticism, and a marker-severity review "
-    "queue that controls for student ability. All synthetic — the point is the "
-    "method."
+    "queue that controls for student ability."
 )
 
 

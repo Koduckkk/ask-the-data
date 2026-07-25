@@ -51,4 +51,14 @@ pages = [
     st.Page(_PAGES / "data_quality.py", title="Data Quality", icon="🧹"),
 ]
 
+# One global data disclaimer in the sidebar, said once for the whole app — so
+# individual pages need only their own page-specific interpretive notes, not a
+# repeated "this is synthetic" warning.
+with st.sidebar:
+    st.caption(
+        "ℹ️ **All data is synthetic**, generated from a seed — no real assessment "
+        "records. The analyses demonstrate the *method*; they recover the "
+        "generator's structure, not real-world truth."
+    )
+
 st.navigation(pages).run()

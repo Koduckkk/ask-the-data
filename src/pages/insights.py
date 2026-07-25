@@ -25,12 +25,9 @@ st.caption(
     "signal-vs-noise."
 )
 
-st.warning(
-    "**Synthetic data — this demonstrates the method.** No gender effect is "
-    "built into the data, so the correct answer is usually 'no real gap', and "
-    "finding that (with a CI that includes zero) is exactly what good inference "
-    "should do.",
-    icon="⚠️",
+st.caption(
+    "ℹ️ No gender effect is built into the data — so a CI that includes zero "
+    "(*no real gap*) is the **correct** finding here, not a failure."
 )
 
 

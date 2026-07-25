@@ -18,41 +18,16 @@ correct; this one can.
 
 from __future__ import annotations
 
-import re
-
 import numpy as np
 import pandas as pd
 
 from clean import CleaningReport
 from emit_vendor import NOT_ATTEMPTED, WRITING_CRITERIA
+# Item-column parsing and the L-block split live in one shared module, derived
+# from roster.ITEMS_PER_DOMAIN, so reshape/analysis/emit_vendor can't disagree.
+from items import ITEM_RE as _ITEM_RE
+from items import domain_of as _domain_of
 
-# A vendor item column: prefix (N/R/L), year level, question number.
-_ITEM_RE = re.compile(r"^([NRL])(\d+)Q(\d+)$")
-
-# The literacy block covers two domains, told apart only by question number.
-_SPELLING_Q = set(range(1, 7))     # L01..L06
-_GRAMMAR_Q = set(range(26, 32))    # L26..L31
-
-
-def _domain_of(column: str) -> str | None:
-    """Map an item column name to its domain, or None if it is not an item.
-
-    ``N`` and ``R`` are one domain each; ``L`` splits by question number, which
-    is the only thing in the file that distinguishes Spelling from Grammar.
-    """
-    match = _ITEM_RE.match(column)
-    if not match:
-        return None
-    prefix, _year, question = match.group(1), match.group(2), int(match.group(3))
-    if prefix == "N":
-        return "Numeracy"
-    if prefix == "R":
-        return "Reading"
-    if question in _SPELLING_Q:
-        return "Spelling"
-    if question in _GRAMMAR_Q:
-        return "Grammar and Punctuation"
-    return None  # an L column outside both ranges — not expected, but not summed
 
 
 def reshape_paper(

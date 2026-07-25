@@ -85,6 +85,13 @@ def _value_overlap(candidate: pd.Series, reference: pd.Series, sample: int = 500
     cand, ref = norm(candidate), norm(reference)
     if not cand:
         return 0.0
+    # A low-cardinality column (a constant, a boolean, a category) whose handful
+    # of values happen to appear in the reference would otherwise score a perfect
+    # 1.0 on precision alone and outrank the true key. An identifier is
+    # near-unique, so require a minimum distinct-value count before trusting the
+    # overlap — a constant can't masquerade as a join key.
+    if len(cand) < 20:
+        return 0.0
     return round(len(cand & ref) / len(cand), 3)
 
 

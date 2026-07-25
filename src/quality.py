@@ -185,7 +185,7 @@ def refused_but_attempted(limit: int = 5) -> pd.DataFrame:
 # live; without one, a pre-written summary of the *same real numbers* is shown,
 # clearly labelled — the same demo-mode pattern the query page uses.
 
-MODEL = "claude-opus-4-8"
+from nl_query import MODEL  # single source of truth for the model id
 
 _SUMMARY_SYSTEM = """You write a short executive summary of a data-cleaning run \
 for a non-technical reader. You are given the exact per-rule counts of what the \

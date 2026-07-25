@@ -90,7 +90,8 @@ with right:
 
 st.header("School effects — the principled version of 'distrust small schools'")
 st.markdown(
-    "The flag above uses a hard cutoff (n < 30). The field-standard upgrade is "
+    f"The flag above uses a hard cutoff (n < {S.MIN_RELIABLE_N}). The "
+    "field-standard upgrade is "
     "**partial pooling** (empirical-Bayes shrinkage): every school's estimate is "
     "pulled toward the overall mean by a weight that depends on its sample size. "
     "A big school barely moves; a tiny school is pulled most of the way in, "

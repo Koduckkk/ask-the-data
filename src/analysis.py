@@ -17,7 +17,6 @@ prepares the item-response matrix from the vendor CSVs and packages the result.
 
 from __future__ import annotations
 
-import re
 from dataclasses import dataclass
 
 import numpy as np
@@ -26,33 +25,15 @@ import pandas as pd
 from emit_vendor import NOT_ATTEMPTED
 from emit_warehouse import RAW_DIR
 
-# A vendor item column: prefix (N/R/L), year level, question number.
-_ITEM_RE = re.compile(r"^([NRL])(\d+)Q(\d+)$")
-
-# Which prefix/question ranges belong to which domain (mirrors the reshape).
-_SPELLING_Q = set(range(1, 7))
-_GRAMMAR_Q = set(range(26, 32))
+# Item-column parsing and the L-block split come from the shared items module,
+# derived from roster.ITEMS_PER_DOMAIN — one source of truth across the codebase.
+from items import ITEM_RE as _ITEM_RE
+from items import domain_of as _domain_of
 
 # Year levels available as vendor paper files.
 YEAR_LEVELS = (3, 5, 7, 9)
 # Domains with 0/1 item responses (Writing is criterion-scored, not item 0/1).
 ITEM_DOMAINS = ("Numeracy", "Reading", "Spelling", "Grammar and Punctuation")
-
-
-def _domain_of(column: str) -> str | None:
-    match = _ITEM_RE.match(column)
-    if not match:
-        return None
-    prefix, _year, question = match.group(1), match.group(2), int(match.group(3))
-    if prefix == "N":
-        return "Numeracy"
-    if prefix == "R":
-        return "Reading"
-    if question in _SPELLING_Q:
-        return "Spelling"
-    if question in _GRAMMAR_Q:
-        return "Grammar and Punctuation"
-    return None
 
 
 @dataclass(frozen=True)
@@ -81,7 +62,6 @@ def _response_matrix(year_level: int, domain: str) -> pd.DataFrame:
 
     cols = [c for c in vendor.columns if _domain_of(c) == domain]
     matrix = vendor[cols].replace(NOT_ATTEMPTED, 0).astype(int)
-    matrix.columns = cols
     # Index by the real student id (PSI). Row order carries through the fit, so
     # ability[i] corresponds to this index's i-th student — real ids, not
     # "student 1, 2, 3".

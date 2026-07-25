@@ -24,9 +24,14 @@ from dataclasses import dataclass
 # Keywords that must never appear in a query we are willing to run. Matched as
 # whole words, case-insensitively. ATTACH/PRAGMA/COPY/INSTALL/LOAD are DuckDB
 # escape hatches to the filesystem or other databases, so they are blocked too.
+# Note: "replace" is deliberately NOT here — replace() is a common scalar string
+# function and SELECT * REPLACE(...) is valid read-only projection syntax, so
+# blocking it rejected legitimate queries for no security gain (a real
+# REPLACE INTO write is already caught by the SELECT-start requirement). The
+# real filesystem/write boundary is the engine sandbox in nl_query._harden.
 _FORBIDDEN = (
     "insert", "update", "delete", "drop", "create", "alter", "truncate",
-    "replace", "merge", "grant", "revoke", "attach", "detach", "pragma",
+    "merge", "grant", "revoke", "attach", "detach", "pragma",
     "copy", "install", "load", "export", "import", "call", "set",
 )
 _FORBIDDEN_RE = re.compile(
@@ -56,6 +61,22 @@ def _strip_comments(sql: str) -> str:
     return _BLOCK_COMMENT_RE.sub(" ", _LINE_COMMENT_RE.sub("", sql))
 
 
+# Single-quoted string literals (with '' escapes), for blanking before the
+# semicolon/keyword checks so a semicolon *inside* a string isn't mistaken for a
+# statement separator (e.g. SELECT ';' AS x).
+_STRING_LITERAL_RE = re.compile(r"'(?:[^']|'')*'")
+
+
+def _blank_string_literals(sql: str) -> str:
+    """Replace string-literal contents with a placeholder for safety checks.
+
+    Used only to *test* the query (semicolon count, keyword scan) — the original
+    SQL is what actually executes. This stops a legitimate literal like `';'` or
+    `'%;%'` from being read as a second statement.
+    """
+    return _STRING_LITERAL_RE.sub("''", sql)
+
+
 def validate_sql(sql: str) -> ValidationResult:
     """Validate a candidate query. Only a single read-only SELECT passes.
 
@@ -72,7 +93,14 @@ def validate_sql(sql: str) -> ValidationResult:
 
     # Trailing semicolon is fine; an *internal* one means multiple statements.
     without_trailing = cleaned.rstrip(";").strip()
-    if ";" in without_trailing:
+
+    # Run the semicolon and keyword checks against a copy with string-literal
+    # contents blanked, so a semicolon or keyword *inside a string* (e.g.
+    # SELECT ';' AS x, or WHERE name LIKE '%drop%') isn't mistaken for the real
+    # thing. The original SQL is still what executes.
+    probe = _blank_string_literals(without_trailing)
+
+    if ";" in probe:
         return ValidationResult(
             ok=False, reason="only a single statement is allowed"
         )
@@ -81,7 +109,7 @@ def validate_sql(sql: str) -> ValidationResult:
     # attempt is rejected with a specific reason ("'DROP' is not permitted")
     # rather than the generic "only SELECT allowed" — more useful to show, and
     # it names exactly what was blocked.
-    forbidden = _FORBIDDEN_RE.search(without_trailing)
+    forbidden = _FORBIDDEN_RE.search(probe)
     if forbidden:
         return ValidationResult(
             ok=False,

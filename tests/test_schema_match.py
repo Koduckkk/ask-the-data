@@ -49,6 +49,17 @@ def test_value_overlap_beats_a_weak_name_match():
     assert top.name_similarity < 0.5  # the name alone would not have found it
 
 
+def test_low_cardinality_column_cannot_win_on_overlap():
+    # A constant/category column whose few values appear in the reference must
+    # NOT score a perfect overlap and outrank the true key.
+    ref = _ids()
+    source = pd.DataFrame({"sector": ["GOV"] * len(ref), "realkey": ref})
+    report = SM.detect_drift(source, "student_id", "platform_student_id", ref)
+    assert report.suggestion == "realkey"
+    const_score = next(s for s in report.scores if s.candidate == "sector")
+    assert const_score.value_overlap == 0.0  # guarded by the cardinality floor
+
+
 def test_decoy_columns_do_not_false_match():
     ref = _ids()
     source = pd.DataFrame(

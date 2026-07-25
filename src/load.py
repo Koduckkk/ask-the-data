@@ -31,16 +31,16 @@ import pandas as pd
 import clean as C
 import reshape as R
 from emit_warehouse import RAW_DIR
+from roster import HOME_SCHOOL_ID, PSEUDO_SCHOOL_IDS
 
 DB_PATH = Path(__file__).resolve().parent.parent / "ask_the_data.duckdb"
 SCHEMA_DOC = Path(__file__).resolve().parent.parent / "docs" / "schema.md"
 
 # Pseudo-schools and the home-school code — real records flow through with these
 # ids, but they are not schools and must be excluded from school-level reporting.
-# Mirrors the roster's PSEUDO_SCHOOL_IDS / HOME_SCHOOL_ID.
-NON_SCHOOL_IDS = frozenset(
-    {"00000", "99999", "REGION-A", "REGION-B", "unassigned", "88000"}
-)
+# Derived from the roster's own constants (not retyped) so it can never drift
+# from the ids the generator actually plants.
+NON_SCHOOL_IDS = frozenset({*PSEUDO_SCHOOL_IDS, HOME_SCHOOL_ID})
 
 
 def clean_students(report: C.CleaningReport) -> pd.DataFrame:

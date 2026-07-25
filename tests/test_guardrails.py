@@ -15,6 +15,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "src"))
 import guardrails as G
 
 
+# --- string literals must not trip the safety checks -------------------------
+
+
+@pytest.mark.parametrize(
+    "sql",
+    [
+        "SELECT ';' AS x",                                    # semicolon in string
+        "SELECT * FROM students WHERE family_name LIKE '%drop%'",  # keyword in string
+        "SELECT replace(school_name, '-', ' ') FROM schools",  # replace() scalar fn
+        "SELECT * FROM students WHERE name = 'a''b'",         # escaped quote
+    ],
+)
+def test_literals_do_not_false_positive(sql):
+    assert G.validate_sql(sql).ok
+
+
 # --- queries that must pass ---------------------------------------------------
 
 

@@ -27,6 +27,52 @@ st.markdown(
     "and *discrimination* by marginal maximum likelihood (via the `girth` library)."
 )
 
+with st.expander("How this works — and why 2PL, not 1PL"):
+    st.markdown(
+        "**In plain terms.** A raw score of 8/10 means something different on an "
+        "easy test than on a hard one. IRT fixes that by putting *students* and "
+        "*questions* on the **same skill scale**, so a student's estimated ability "
+        "doesn't depend on which particular questions they happened to get. That's "
+        "why real programs (including NAPLAN) report *scaled scores*, not raw marks."
+    )
+    st.markdown(
+        "It describes every question with two numbers:\n"
+        "- **Difficulty** — how much skill it takes to have an even chance of "
+        "getting it right.\n"
+        "- **Discrimination** — how sharply the question separates students just "
+        "below that skill level from those just above. A high-discrimination item "
+        "is a clean test of skill; a low one barely tells you who's stronger."
+    )
+
+    st.markdown("---")
+    st.markdown(
+        "**For the technical reader.** The 2PL gives each item a difficulty $b$ "
+        "and a discrimination $a$; a person has latent ability $\\theta$. The "
+        "probability of a correct response is a logistic curve:"
+    )
+    st.latex(r"P(\text{correct}\mid\theta) = \frac{1}{1 + e^{-a(\theta - b)}}")
+    st.markdown(
+        "**Why 2PL and not 1PL?** The 1PL (Rasch) model drops $a$ — it *forces "
+        "every item to discriminate equally* and lets items differ only in "
+        "difficulty:"
+    )
+    st.latex(r"P(\text{correct}\mid\theta) = \frac{1}{1 + e^{-(\theta - b)}}")
+    st.markdown(
+        "But equal discrimination is empirically false — real items separate "
+        "students at very different sharpnesses — and **discrimination is itself a "
+        "useful item-quality diagnostic** (a low-$a$ item is a candidate to "
+        "revise or cut). For a *descriptive* demonstration like this one, we let "
+        "the data reveal $a$ rather than assuming it away. If the goal were a "
+        "locked measurement scale with invariance guarantees, Rasch would be the "
+        "principled choice instead — it's a trade-off, not a strict upgrade. "
+        "(3PL adds a guessing floor $c$; it's unstable to estimate and mostly "
+        "matters for multiple-choice, so 2PL is the conventional stopping point.)"
+    )
+    st.caption(
+        "Fitted here by marginal maximum likelihood via the `girth` library — "
+        "see `src/analysis.py`."
+    )
+
 st.caption(
     "ℹ️ Because the items were generated with near-identical difficulty, the "
     "fit correctly recovers *clustered* item parameters — the workflow is the "
@@ -61,10 +107,19 @@ if st.button("Fit the 2PL model", type="primary"):
     items, ability, student_ids, n_persons, aic, bic = _fit(year_level, domain)
 
     st.subheader(f"Item parameters — Year {year_level} {domain}")
-    st.caption(
-        f"Fitted on {n_persons:,} students. **Difficulty**: where on the ability "
-        "scale an item is hardest to discriminate (higher = harder). "
-        "**Discrimination**: how sharply the item separates ability levels."
+    st.markdown(
+        f"Fitted on **{n_persons:,} students**. Two numbers describe each question:"
+    )
+    dcol1, dcol2 = st.columns(2)
+    dcol1.info(
+        "**Difficulty** — how much skill a question demands. "
+        "Higher = harder (fewer students get it right).",
+        icon="🎯",
+    )
+    dcol2.info(
+        "**Discrimination** — how cleanly a question separates stronger students "
+        "from weaker ones. Higher = a sharper test of skill.",
+        icon="🔪",
     )
 
     m1, m2, m3 = st.columns(3)

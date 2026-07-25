@@ -26,6 +26,69 @@ st.caption(
     "queue that controls for student ability."
 )
 
+with st.expander("How this works — shrinkage and marker screening"):
+    st.markdown(
+        "**In plain terms.** Two things on this page look unusual and need a "
+        "second look: **schools** and **markers**. The hard part is telling a "
+        "*real* signal from *noise* — and both methods here are built to do "
+        "exactly that."
+    )
+    st.markdown(
+        "**Schools — don't trust a tiny school's average.** A school with 8 "
+        "students can top the table by luck alone. Instead of trusting each "
+        "school's raw average, we **pull it toward the state average** — a lot "
+        "for small schools (their average is mostly luck), barely at all for "
+        "big schools (their average is solid). Big schools keep their number; "
+        "small schools have to earn theirs. It's a smooth, principled version "
+        "of 'ignore schools with too few students'."
+    )
+    st.markdown(
+        "**Markers — is this marker harsh, or did they just get weak students?** "
+        "Writing is marked by people, and some mark harder than others. But a "
+        "low average might just mean that marker happened to get weaker students. "
+        "So we first **predict** each student's writing score from how they did "
+        "in the *other* subjects, then look at the gap. A marker whose scripts "
+        "sit consistently below (or above) that prediction — across many "
+        "scripts — is the one to review. The output is a ranked queue: *give me "
+        "the top N markers to investigate*."
+    )
+
+    st.markdown("---")
+    st.markdown(
+        "**For the technical reader.** Schools use **empirical-Bayes shrinkage "
+        "(partial pooling)**. Each school's shrunk estimate is a reliability-"
+        "weighted blend of its own mean and the grand mean:"
+    )
+    st.latex(
+        r"\hat{\mu}_s = w_s\,\bar{x}_s + (1 - w_s)\,\mu, \qquad "
+        r"w_s = \frac{\tau^2}{\tau^2 + \sigma^2 / n_s}"
+    )
+    st.markdown(
+        r"where $\tau^2$ is the between-school variance, $\sigma^2$ the "
+        r"within-school variance, and $n_s$ the school's size. A large $n_s$ "
+        r"drives $w_s \to 1$ (keep your own mean); a small $n_s$ drives "
+        r"$w_s \to 0$ (pulled to $\mu$). This is exactly how value-added / "
+        r"school-effect models work."
+    )
+    st.markdown(
+        "Markers use **covariate-adjusted residuals**. Each script's residual "
+        "removes student ability by subtracting an expectation built from the "
+        "student's other-domain mean:"
+    )
+    st.latex(
+        r"r_{i} = \text{writing}_i - \mathbb{E}[\text{writing}\mid "
+        r"\text{other-domain ability}_i]"
+    )
+    st.markdown(
+        "Averaging $r_i$ by marker isolates the **marker effect** (student "
+        "ability is differenced out). Markers are then flagged by a **robust "
+        "peer-relative** distance — median/MAD across markers, not distance "
+        "from zero — because with thousands of scripts per marker even a "
+        "trivial residual is 'significant' yet meaningless. Same logic as the "
+        "school model: *explain what you can, flag what's left.*"
+    )
+    st.caption("See `src/stats.py` — `school_effects()` and `marker_anomalies()`.")
+
 
 @st.cache_resource
 def _con():

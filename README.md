@@ -1,10 +1,12 @@
 # Ask the Data
 
-> A prototype that lets non-technical staff query messy assessment data in plain English.
-> Raw data flows through a documented, tested cleaning pipeline into a small database;
-> users type a question ("average year 9 numeracy score by gender in 2024"); an LLM
-> translates it to SQL against a documented schema; **the generated SQL is always
-> displayed next to the results so a human can verify the work.** Read-only guardrails,
+> A data-science prototype for messy assessment data. Raw feeds flow through a
+> **documented, tested cleaning pipeline** — reconciled against source totals as a
+> correctness proof — into a small database, then into analysis that does real
+> statistical work: **IRT psychometrics, empirical-Bayes school effects, and a
+> marker-anomaly review queue.** It also lets non-technical staff query the data in
+> plain English, where **an LLM translates the question to SQL and the generated SQL
+> is always shown next to the results for human verification.** Read-only guardrails,
 > offline demo mode, fully reproducible on synthetic data.
 
 ![Anomaly Detection — marker-severity review queue and school-effect shrinkage](docs/images/hero-anomaly.png)

@@ -100,6 +100,22 @@ underpins it all:
   catches a source renaming its id column between years and suggests the remap by
   value overlap (proposing, never silently re-joining on a guessed key).
 
+## Module map
+
+The `src/` modules are flat, but they group into the pipeline's four stages —
+raw data flows left to right, and the app reads from the database at the end:
+
+| Stage | Modules | Role |
+|---|---|---|
+| **1 · Generate** | `roster` · `mess` · `emit_warehouse` · `emit_vendor` · `items` · `generate_data` | Fabricate the messy corpus from a seeded roster |
+| **2 · Clean + reshape** | `clean` · `reshape` · `schema_match` | One rule per defect; reshape the vendor feed and reconcile it to warehouse totals |
+| **3 · Load** | `load` | Apply every rule, report changes, write clean tables to DuckDB |
+| **4 · Query + analyse** | `stats` · `analysis` · `nl_query` · `guardrails` · `quality` · `display` · `app` + `pages/` | The five app pages that read the clean database |
+
+`roster` is the single source of truth every generator derives from; the DuckDB
+file is the seam between the pipeline and the app. Only `nl_query` uses the LLM,
+and only `guardrails` gates its output.
+
 ### Screens
 
 The query page — plain-English question, the generated SQL shown beside the result:

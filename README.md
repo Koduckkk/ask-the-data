@@ -179,3 +179,7 @@ This is a prototype, and it is scoped as one:
 
 Built as a portfolio piece demonstrating a documented, tested cleaning pipeline
 with an AI query layer kept honest by design.
+
+## License
+
+[MIT](LICENSE) — free to use, modify, and share with attribution.

@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import load as L
 import quality as Q
 
-st.set_page_config(page_title="Data Quality — Ask the Data", page_icon="🧹", layout="wide")
 
 st.title("🧹 Data Quality")
 st.caption(

@@ -18,7 +18,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 import analysis as A
 import display as D
 
-st.set_page_config(page_title="IRT Analysis — Ask the Data", page_icon="📐", layout="wide")
 
 st.title("📐 IRT Analysis")
 st.markdown(

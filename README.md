@@ -66,29 +66,33 @@ streamlit run src/app.py             # text box, results, and the SQL beside the
 python src/nl_query.py "average writing score by year level"
 ```
 
-The app has three pages:
+The app has five pages, ordered so the sidebar reads as a narrative — the
+data-science work first, then the interactive query, then the cleaning that
+underpins it all:
 
-- **Query** — ask questions, see the SQL beside the results.
-- **Data Quality** — the cleaning made visible: raw dirty values next to their
-  cleaned form for each defect (each labelled with the `clean.py` function that
-  produced it), a count of every change, the cross-table "refused but attempted"
-  contradiction that no single file reveals, and a **schema-drift detector** that
-  catches a source renaming its id column between years and suggests the remap by
-  value overlap (proposing, never silently re-joining on a guessed key).
+- **Anomaly Detection** — the operational "what needs a second look": **school
+  effects** with empirical-Bayes shrinkage (small schools pulled toward the mean
+  by their unreliability — the principled version of a hard n-cutoff), and
+  **marker-anomaly detection** that flags harsh/lenient markers after controlling
+  for student ability via their other-domain scores, ranked as a review queue
+  ("give me the top N markers to investigate").
 - **IRT Analysis** — a methodology demonstration: real assessment scaled scores
   come from Item Response Theory, so this page fits a 2-parameter logistic (2PL)
   IRT model to the item-level responses and shows the estimated item difficulty
   and discrimination, plus each student's latent ability. Framed honestly — the
   data is synthetic, so it demonstrates the *workflow*, not real-world insight.
 - **Statistical Insights** — the inference layer: is a gender gap real or noise?
-  (a difference with a 95% confidence interval and a plain-English verdict);
-  **school effects** with empirical-Bayes shrinkage (small schools pulled toward
-  the mean by their unreliability — the principled version of a hard n-cutoff);
-  **marker-anomaly detection** that flags harsh/lenient markers after controlling
-  for student ability via their other-domain scores, ranked as a review queue
-  ("top N markers to investigate"); and a note connecting a cleaning step to its
-  inferential consequence — skipping the sentinel recode biases the mean by ~125
-  points.
+  (a difference with a 95% confidence interval and a plain-English verdict), and a
+  note connecting a cleaning step to its inferential consequence — skipping the
+  sentinel recode biases the mean by ~125 points.
+- **Ask the Data** — the interactive query page: ask a question in plain English,
+  see the generated SQL beside the results.
+- **Data Quality** — the cleaning made visible: raw dirty values next to their
+  cleaned form for each defect (each labelled with the `clean.py` function that
+  produced it), a count of every change, the cross-table "refused but attempted"
+  contradiction that no single file reveals, and a **schema-drift detector** that
+  catches a source renaming its id column between years and suggests the remap by
+  value overlap (proposing, never silently re-joining on a guessed key).
 
 With no API key this runs in **demo mode** — a set of canned questions — so the
 whole pipeline is runnable without one. Set `ANTHROPIC_API_KEY` (copy

@@ -1,14 +1,10 @@
-"""Ask the Data — a minimal interface over the NL->SQL layer.
+"""Ask the Data — multipage app entry point (navigation controller).
 
-Deliberately thin. The interesting code is in nl_query.py and guardrails.py;
-this page just wires a text box to answer() and lays the result out so the
-design signature is visible: the generated SQL sits next to the results, always,
-so a human can verify what the model wrote.
+Defines the page order explicitly with st.navigation, so the sidebar reads as a
+narrative: the data-science work first (anomaly detection, IRT, inference), then
+the interactive query page, then the cleaning showcase that underpins it all.
 
     streamlit run src/app.py
-
-Runs in demo mode with no API key (a set of canned questions), or translates
-free-form questions with a key present. The mode is shown in the sidebar.
 """
 
 from __future__ import annotations
@@ -25,8 +21,7 @@ def _require_streamlit_run() -> None:
     A Streamlit script only works under `streamlit run`, which installs a
     ScriptRunContext. Run with plain `python` there is none, and every Streamlit
     call emits a "missing ScriptRunContext" warning — dozens of them, burying the
-    real problem. Detect the missing context and print a single instruction
-    instead.
+    real problem. Detect the missing context and print a single instruction.
     """
     from streamlit.runtime.scriptrunner import get_script_run_ctx
 
@@ -42,93 +37,18 @@ def _require_streamlit_run() -> None:
 
 _require_streamlit_run()
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-
-import display as D
-import nl_query as NL
-
 st.set_page_config(page_title="Ask the Data", page_icon="🔎", layout="wide")
 
-mode = NL.resolve_mode()
+_PAGES = Path(__file__).resolve().parent / "pages"
 
-# --- sidebar: what mode we're in and why -------------------------------------
+# Order is the narrative — data science first for a statistics panel, then the
+# interactive query, then the cleaning that makes it all possible.
+pages = [
+    st.Page(_PAGES / "anomaly.py", title="Anomaly Detection", icon="🚩"),
+    st.Page(_PAGES / "irt.py", title="IRT Analysis", icon="📐"),
+    st.Page(_PAGES / "insights.py", title="Statistical Insights", icon="📊"),
+    st.Page(_PAGES / "query.py", title="Ask the Data", icon="🔎", default=True),
+    st.Page(_PAGES / "data_quality.py", title="Data Quality", icon="🧹"),
+]
 
-with st.sidebar:
-    st.header("Ask the Data")
-    st.caption(
-        "Query messy assessment data in plain English. The generated SQL is "
-        "always shown so you can verify the answer."
-    )
-    if mode == "demo":
-        st.info(
-            "**Demo mode** — no API key detected. Answering from a set of "
-            "canned questions. Set `ANTHROPIC_API_KEY` for free-form queries."
-        )
-    else:
-        st.success("**Live mode** — questions are translated to SQL by the LLM.")
-
-    st.divider()
-    st.caption("Example questions")
-    for example in NL.demo_examples():
-        # Clicking an example fills the box (works in either mode).
-        if st.button(example, width='stretch'):
-            st.session_state["question"] = example
-
-    st.divider()
-    st.caption(
-        "All data is synthetic. Cleaning and reshaping happen upstream in the "
-        "pipeline; this page only queries the already-clean database."
-    )
-
-# --- main: ask, then show SQL beside results ---------------------------------
-
-st.title("🔎 Ask the Data")
-
-question = st.text_input(
-    "Ask a question about the assessment data",
-    key="question",
-    placeholder="e.g. average writing score by year level",
-)
-
-if question:
-    with st.spinner("Translating and running…"):
-        result = NL.answer(question)
-
-    left, right = st.columns([3, 2])
-
-    with right:
-        st.subheader("Generated SQL")
-        if result.sql:
-            st.code(result.sql, language="sql")
-        else:
-            st.caption("No SQL was generated for this question.")
-        st.caption(f"Mode: {result.mode}")
-
-    with left:
-        st.subheader("Result")
-        if result.ok:
-            # Chart first when the shape suits one, then the table. Columns are
-            # humanised for display only — the SQL panel keeps the literal names.
-            spec = D.choose_chart(result.rows)
-            pretty = D.humanise_columns(result.rows)
-            if spec.kind != "table":
-                chart_df = D.chart_frame(result.rows, spec)
-                if spec.kind == "line":
-                    st.line_chart(chart_df)
-                else:
-                    # Horizontal bars keep category labels readable — no
-                    # rotated text, and long school names fit down the y-axis.
-                    st.bar_chart(chart_df, horizontal=True)
-            st.dataframe(pretty, width='stretch', hide_index=True)
-            st.caption(f"{len(result.rows):,} row(s)")
-        else:
-            st.warning(result.error)
-            if result.suggestion:
-                st.caption(result.suggestion)
-            # On a demo miss, offer the closest example questions as buttons.
-            for example in result.examples:
-                if st.button(example, key=f"near-{example}", width='stretch'):
-                    st.session_state["question"] = example
-                    st.rerun()
-else:
-    st.caption("Type a question above, or pick an example from the sidebar.")
+st.navigation(pages).run()

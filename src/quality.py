@@ -206,27 +206,46 @@ def _report_lines(report_frame: pd.DataFrame) -> str:
     return "\n".join(lines)
 
 
+# An accurate one-clause description per rule, so the demo summary never pairs a
+# fixed claim with a variable rule name. If a rule isn't here, a neutral fallback
+# is used — never a fabricated description.
+_RULE_DESCRIPTIONS = {
+    "canonicalise_code": "standardised inconsistent coded values (spellings like "
+    "'NUM', 'Maths' and 'numeracy' that would otherwise split one group into several)",
+    "parse_dates": "parsed dates from mixed formats into one ISO form",
+    "drop_exact_duplicates": "removed exact duplicate rows",
+    "parse_year_level": "unified year level (turning 'Year 9' and 9 into one value)",
+    "recode_sentinels": "recoded 'no score' sentinels (999, -1) to null",
+    "strip_junk_characters": "stripped junk characters from names",
+    "coerce_numeric": "coerced non-numeric text out of score columns",
+    "normalise_id": "normalised identifiers so the sources join",
+    "repair_mojibake": "repaired encoding-corrupted names",
+    "blank_placeholders": "turned placeholder text into true nulls",
+    "zero_refused_scores": "zeroed refused-but-scored records",
+}
+
+
 def _demo_summary(report_frame: pd.DataFrame) -> str:
     """A pre-written summary grounded on the real counts (keyless fallback).
 
     Not a fabricated stand-in: it states the same figures the deterministic
-    report computed, so it is accurate even though it wasn't generated live.
+    report computed, and each rule is paired with its OWN accurate description
+    (never a fixed claim on a variable rule), so it stays correct whatever the
+    top rule happens to be.
     """
     agg = report_frame.groupby("rule")["changed"].sum().sort_values(ascending=False)
     total = int(report_frame["changed"].sum())
     top_rule, top_n = agg.index[0], int(agg.iloc[0])
+    top_desc = _RULE_DESCRIPTIONS.get(top_rule, f"applied the {top_rule.replace('_', ' ')} rule")
     sentinels = int(agg.get("recode_sentinels", 0))
     refused = int(agg.get("zero_refused_scores", 0))
     return (
         f"The pipeline changed {total:,} values across the raw sources. The "
-        f"largest category was standardising inconsistent coded values "
-        f"({top_rule.replace('_', ' ')}, {top_n:,} values) — spellings like "
-        f"'NUM', 'Maths' and 'numeracy' that would otherwise split a single "
-        f"group into several. It also recoded {sentinels:,} sentinel scores "
-        f"(999, -1) that would have skewed every average that touched them, and "
-        f"overrode {refused:,} refused-but-scored records to zero using the "
-        f"authoritative participation code. Every change is attributable to a "
-        f"named, tested rule."
+        f"largest single category ({top_n:,} values) {top_desc}. It also recoded "
+        f"{sentinels:,} sentinel scores (999, -1) that would have skewed every "
+        f"average that touched them, and overrode {refused:,} refused-but-scored "
+        f"records to zero using the authoritative participation code. Every "
+        f"change is attributable to a named, tested rule."
     )
 
 

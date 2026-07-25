@@ -109,6 +109,39 @@ def test_shrunk_estimate_lies_between_raw_and_grand_mean(con):
         assert lo - 0.1 <= r["shrunk_estimate"] <= hi + 0.1
 
 
+def test_reliability_weight_matches_the_correct_formula(con):
+    # Quantitative check — the earlier tests only verified DIRECTION, which a
+    # wrong tau2 / sigma2 estimator still satisfies. Recompute the variance
+    # components the correct way (pooled within-variance; between-variance with
+    # the sigma2*mean(1/n) sampling term) and confirm the reliability weights
+    # match. A regression in either estimator breaks this.
+    import numpy as np
+
+    # Group by school NAME so it lines up with school_effects' output key, and
+    # so per-school n/var are matched exactly (school_effects groups by name).
+    rows = con.execute(
+        """
+        SELECT sc.school_name AS school, COUNT(*) AS n,
+               AVG(r.scaled_score) AS mean, VAR_SAMP(r.scaled_score) AS var
+        FROM results r JOIN schools sc ON r.school_id = sc.school_id
+        WHERE r.domain = 'Numeracy' AND r.scaled_score IS NOT NULL
+        GROUP BY sc.school_name
+        """
+    ).fetchdf()
+
+    n = rows["n"].to_numpy()
+    pooled = rows[rows["n"] > 1]
+    dof = pooled["n"].to_numpy() - 1
+    sigma2 = float((pooled["var"].to_numpy() * dof).sum() / dof.sum())
+    observed = float(rows["mean"].var(ddof=1))
+    tau2 = max(observed - sigma2 * np.mean(1.0 / n), 1.0)
+    rows["expected"] = tau2 / (tau2 + sigma2 / n)
+
+    df = S.school_effects("Numeracy", con=con)
+    merged = df.merge(rows[["school", "expected"]], on="school")
+    assert (merged["reliability"] - merged["expected"]).abs().max() < 0.01
+
+
 # --- marker anomaly detection ------------------------------------------------
 
 

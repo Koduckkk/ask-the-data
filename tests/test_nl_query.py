@@ -79,6 +79,22 @@ def test_malicious_sql_is_rejected_before_execution(con, monkeypatch):
     assert con.execute("SELECT COUNT(*) FROM students").fetchone()[0] > 0
 
 
+def test_file_read_via_table_function_is_sandboxed(con, monkeypatch):
+    # The guardrail's keyword denylist does NOT catch DuckDB's file-reading
+    # table functions (read_text/read_csv/glob) — a SELECT that starts with
+    # SELECT and has no forbidden keyword passes validation. The engine sandbox
+    # (_harden) must block it anyway, at execution.
+    monkeypatch.setattr(
+        NL, "_match_demo", lambda q: "SELECT * FROM read_text('/etc/hostname')"
+    )
+    res = NL.answer("read a file", con=con, mode="demo")
+    # It passes the guardrail (no forbidden keyword) but must fail at execution,
+    # blocked by the sandbox — never returning file contents.
+    assert not res.ok
+    assert "execution failed" in res.error
+    assert res.rows is None
+
+
 def test_resolve_mode_prefers_demo_without_key(monkeypatch):
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     monkeypatch.delenv("ASK_THE_DATA_MODE", raising=False)

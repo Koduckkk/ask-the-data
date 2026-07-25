@@ -219,12 +219,22 @@ def school_effects(
             con.close()
 
     grand_mean = float((rows["raw_mean"] * rows["n"]).sum() / rows["n"].sum())
-    # Within-school variance (average noise level of one student's score).
-    sigma2 = float(rows["within_var"].mean())
+
+    # Within-school variance: the POOLED estimate, weighted by each school's
+    # degrees of freedom (n_j - 1), not a plain mean of per-school variances —
+    # a school of 1000 should count far more than one of 20. Schools of n=1
+    # contribute no variance information (NaN), so drop them from the pool.
+    pooled = rows[rows["n"] > 1]
+    dof = pooled["n"] - 1
+    sigma2 = float((pooled["within_var"] * dof).sum() / dof.sum())
+
     # Between-school variance (how much school true means genuinely differ) —
-    # the variance of the raw means, minus the sampling noise each one carries.
+    # the variance of the raw means minus the sampling noise each mean carries.
+    # That noise is E[sigma2 / n_j] = sigma2 * mean(1/n_j), NOT sigma2/mean(n):
+    # by Jensen mean(1/n) >= 1/mean(n), so the wrong form subtracts too little
+    # and inflates tau2, weakening shrinkage.
     observed_var = float(rows["raw_mean"].var(ddof=1))
-    tau2 = max(observed_var - sigma2 / rows["n"].mean(), 1.0)
+    tau2 = max(observed_var - sigma2 * (1.0 / rows["n"]).mean(), 1.0)
 
     # Reliability weight per school: how much to trust its own average.
     # weight -> 1 for large n (keep own mean), -> 0 for small n (use grand mean).

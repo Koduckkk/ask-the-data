@@ -206,6 +206,24 @@ def resolve_mode() -> str:
     return "llm" if os.environ.get("ANTHROPIC_API_KEY") else "demo"
 
 
+# --- engine sandbox ----------------------------------------------------------
+
+
+def _harden(con: duckdb.DuckDBPyConnection) -> None:
+    """Disable DuckDB's filesystem and network access before running user SQL.
+
+    The guardrail's keyword denylist is a necessary first check, but a denylist
+    over model-authored SQL is fundamentally leaky: DuckDB's file-reading table
+    functions (``read_text``, ``read_csv``, ``read_parquet``, ``glob`` …) start
+    with SELECT, carry no forbidden keyword, and would otherwise pass and read
+    arbitrary local files. Turning off external access removes that whole class
+    at the engine level, regardless of what SQL is emitted — the real boundary,
+    not another word to blocklist. ``read_only=True`` only blocks writes, so it
+    is not a substitute for this.
+    """
+    con.execute("SET enable_external_access = false")
+
+
 # --- the public entry point --------------------------------------------------
 
 
@@ -246,10 +264,11 @@ def answer(
         result.suggestion = "Rephrase the question, or ask for a plain SELECT over the listed tables."
         return result
 
-    # 3. Execute read-only, row-limited.
+    # 3. Execute read-only, row-limited, and sandboxed.
     owns_connection = con is None
     con = con or duckdb.connect(str(DB_PATH), read_only=True)
     try:
+        _harden(con)
         result.rows = con.execute(enforce_row_limit(result.sql, row_limit)).fetchdf()
     except Exception as exc:  # a valid-looking query can still fail at runtime
         result.error = f"execution failed: {exc}"

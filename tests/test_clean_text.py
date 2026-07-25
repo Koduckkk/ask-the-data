@@ -91,11 +91,27 @@ def test_normalise_trim_only_leaves_case():
 
 
 def test_junk_roundtrip_recovers_original():
+    # Strippable junk round-trips. '?' and the replacement char are deliberately
+    # NOT stripped (they double as lossy-mojibake markers, preserved for
+    # flagging), so a name containing one of those won't fully recover — that's
+    # the flag-don't-guess contract, tested separately below.
     rng = np.random.default_rng(1)
     original = pd.Series(["Smith", "Nguyen", "Patel", "Kelly", "Zhang"] * 20)
     dirtied = M.inject_junk_characters(original, rng, rate=0.5)
     recovered = C.strip_junk_characters(dirtied)
-    assert list(recovered) == list(original)
+    for orig, dirt, rec in zip(original, dirtied, recovered):
+        if "?" in dirt or "�" in dirt:
+            assert rec == dirt  # mojibake markers preserved, not stripped
+        else:
+            assert rec == orig  # ordinary junk fully removed
+
+
+def test_strip_junk_preserves_lossy_mojibake_markers():
+    # The flag-don't-guess contract: a name lossily corrupted to '?' or the
+    # replacement char must survive junk-stripping so it stays flaggable and
+    # doesn't become a plausible-but-wrong clean name.
+    lossy = pd.Series(["Ren?e", "Jos?", "O?Brien", "Bj�rn"])
+    assert list(C.strip_junk_characters(lossy)) == ["Ren?e", "Jos?", "O?Brien", "Bj�rn"]
 
 
 def test_placeholder_roundtrip_nulls_what_was_injected():

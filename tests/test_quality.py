@@ -92,6 +92,26 @@ def test_demo_summary_is_grounded_on_real_counts(monkeypatch):
     assert "50" in summary and "7" in summary
 
 
+def test_demo_summary_describes_the_actual_top_rule(monkeypatch):
+    # The prose for the top category must match whatever rule is actually top —
+    # never a fixed "coded values" claim pinned onto e.g. parse_dates.
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    monkeypatch.delenv("ASK_THE_DATA_MODE", raising=False)
+    report = pd.DataFrame(
+        {
+            "rule": ["parse_dates", "canonicalise_code"],
+            "column": ["birth_date", "domain"],
+            "changed": [99999, 10],
+            "detail": ["", ""],
+        }
+    )
+    summary, _ = Q.summarise_report(report)
+    # It describes date parsing, not "coded values", for the top category.
+    top_clause = summary.split(". It also")[0]
+    assert "date" in top_clause.lower()
+    assert "coded values" not in top_clause
+
+
 def test_summarise_report_uses_query_mode(monkeypatch):
     monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-x")
     monkeypatch.setenv("ASK_THE_DATA_MODE", "demo")  # forced demo overrides key

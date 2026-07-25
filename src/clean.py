@@ -82,8 +82,14 @@ _NULL_PLACEHOLDERS = frozenset(
     {"n/a", "na", "null", "-", "", "unknown", ".", "nan", "none"}
 )
 
-# Characters that have no place in a name. Kept in sync with mess._JUNK_CHARS.
-_JUNK_CHARS = set("[]&#~!@$%^*{}|\\<>?=+_/")
+# Characters that have no place in a name. A subset of mess._JUNK_CHARS: '?' and
+# the replacement character are deliberately EXCLUDED, because they double as the
+# lossy-mojibake markers (é/ç/... reduced to '?' or the replacement char, which
+# repair_mojibake cannot recover). Stripping them would erase the unrecoverable
+# marker — turning "Ren?e" into a plausible-but-wrong "Rene" that mis-joins and
+# is no longer flaggable — violating the flag-don't-guess contract. Both lossy
+# markers are preserved for the vendor name to be the source of truth.
+_JUNK_CHARS = set("[]&#~!@$%^*{}|\\<>=+_/")
 
 
 def repair_mojibake(

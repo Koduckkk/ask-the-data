@@ -88,21 +88,15 @@ def test_reshape_writing_sums_criteria():
 # --- the reconciliation proof (the headline) ---------------------------------
 
 
-def test_vendor_reshape_reconciles_with_warehouse():
-    """Reshape the real vendor feed and assert it reproduces every total.
+def test_paper_reshape_reconciles_exactly():
+    """The mechanically-scored paper domains reconcile 100% with the warehouse.
 
-    This is the proof of correctness for the entire structural group. The
-    generator built the vendor items to sum to the warehouse raw score exactly,
-    so a correct reshape yields zero mismatches.
+    Numeracy/Reading/Spelling/Grammar are 0/1 item-scored, not human-marked, so
+    their item sums must equal the warehouse raw score exactly. This is the proof
+    of correctness for the structural reshape.
     """
-    parts = []
-    for yl in (3, 5, 7, 9):
-        parts.append(R.reshape_paper(pd.read_csv(RAW_DIR / f"vendor_y{yl}.csv")))
-    for label in ("y3", "y579"):
-        parts.append(R.reshape_writing(pd.read_csv(RAW_DIR / f"vendor_writing_{label}.csv")))
-    vendor_long = pd.concat(parts, ignore_index=True).drop_duplicates(
-        ["PlatformId", "domain"]
-    )
+    parts = [R.reshape_paper(pd.read_csv(RAW_DIR / f"vendor_y{yl}.csv")) for yl in (3, 5, 7, 9)]
+    vendor_long = pd.concat(parts, ignore_index=True).drop_duplicates(["PlatformId", "domain"])
 
     roster = build_roster(seed=roster_mod.SEED)
     truth = roster.results[roster.results["participation"] == "P"][
@@ -111,9 +105,33 @@ def test_vendor_reshape_reconciles_with_warehouse():
 
     mismatches = R.reconcile(vendor_long, truth)
     assert mismatches.empty, (
-        f"{len(mismatches)} (student, domain) pairs did not reconcile — "
-        "the reshape is wrong"
+        f"{len(mismatches)} paper pairs did not reconcile — the reshape is wrong"
     )
+
+
+def test_writing_reconciles_up_to_marker_bias():
+    """Writing is human-marked, so it reconciles only up to marker severity.
+
+    Unlike the mechanical paper domains, writing carries a marker effect: a harsh
+    or lenient marker shifts the score away from the student's true level. So most
+    writing scripts still match, but a fraction (those marked by biased markers)
+    deviate — and that deviation is the signal the marker-anomaly model detects.
+    """
+    parts = [
+        R.reshape_writing(pd.read_csv(RAW_DIR / f"vendor_writing_{label}.csv"))
+        for label in ("y3", "y579")
+    ]
+    writing_long = pd.concat(parts, ignore_index=True).drop_duplicates(["PlatformId", "domain"])
+
+    roster = build_roster(seed=roster_mod.SEED)
+    truth = roster.results[
+        (roster.results["participation"] == "P") & (roster.results["domain"] == "Writing")
+    ][["student_id", "domain", "raw_score"]]
+
+    mismatches = R.reconcile(writing_long, truth)
+    frac = len(mismatches) / len(writing_long)
+    # Most scripts reconcile; a minority (biased markers ~2 of 10) deviate.
+    assert 0.05 < frac < 0.5, f"unexpected writing mismatch fraction: {frac:.2f}"
 
 
 def test_reconcile_detects_a_deliberate_error():

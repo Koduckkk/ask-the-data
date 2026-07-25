@@ -82,10 +82,13 @@ The app has three pages:
   data is synthetic, so it demonstrates the *workflow*, not real-world insight.
 - **Statistical Insights** — the inference layer: is a gender gap real or noise?
   (a difference with a 95% confidence interval and a plain-English verdict);
-  school rankings that report each average's standard error and **withhold**
-  small-sample schools as unreliable rather than ranking them on noise; and a
-  note connecting a cleaning step to its inferential consequence — skipping the
-  sentinel recode biases the mean by ~125 points.
+  **school effects** with empirical-Bayes shrinkage (small schools pulled toward
+  the mean by their unreliability — the principled version of a hard n-cutoff);
+  **marker-anomaly detection** that flags harsh/lenient markers after controlling
+  for student ability via their other-domain scores, ranked as a review queue
+  ("top N markers to investigate"); and a note connecting a cleaning step to its
+  inferential consequence — skipping the sentinel recode biases the mean by ~125
+  points.
 
 With no API key this runs in **demo mode** — a set of canned questions — so the
 whole pipeline is runnable without one. Set `ANTHROPIC_API_KEY` (copy

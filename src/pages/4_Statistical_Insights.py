@@ -129,6 +129,86 @@ with right:
             "too unstable to compare — ranking them would be reading noise."
         )
 
+# --- school effects with shrinkage -------------------------------------------
+
+st.header("School effects — the principled version of 'distrust small schools'")
+st.markdown(
+    "The flag above uses a hard cutoff (n < 30). The field-standard upgrade is "
+    "**partial pooling** (empirical-Bayes shrinkage): every school's estimate is "
+    "pulled toward the overall mean by a weight that depends on its sample size. "
+    "A big school barely moves; a tiny school is pulled most of the way in, "
+    "because its own average is mostly noise. The same judgement, applied "
+    "smoothly and grounded in the between- vs within-school variance."
+)
+
+
+@st.cache_data
+def _effects(domain: str):
+    return S.school_effects(domain)
+
+
+effects = _effects(domain)
+st.dataframe(
+    effects.rename(
+        columns={
+            "school": "School", "n": "Students", "raw_mean": "Raw mean",
+            "shrunk_estimate": "Shrunk estimate", "reliability": "Reliability",
+            "pulled_by": "Pulled by",
+        }
+    ),
+    use_container_width=True,
+    hide_index=True,
+)
+st.caption(
+    "See the small schools: their raw mean is pulled several points toward the "
+    "centre (low reliability), while large schools keep their own estimate "
+    "(reliability ≈ 1). This is how value-added / school-effect models work."
+)
+
+# --- marker anomaly detection ------------------------------------------------
+
+st.header("Marker anomalies — a review queue")
+st.markdown(
+    "Writing is human-marked, so a marker's severity is a real bias — but a "
+    "harsh score might just mean a weak cohort. To separate the two, each "
+    "script's writing score is compared to what the student's **other-domain "
+    "ability** predicts; the residual removes student ability, and averaging by "
+    "marker isolates the **marker effect**. Markers are ranked by a normalised "
+    "severity score — a review team works down the queue: *give me the top N "
+    "markers to investigate*."
+)
+
+
+@st.cache_data
+def _markers():
+    return S.marker_anomalies()
+
+
+markers = _markers()
+n_flagged = int((markers["flag"] != "ok").sum())
+st.error(
+    f"**{n_flagged} markers flagged** for review — scoring anomalously relative "
+    f"to their peers, after controlling for student ability.",
+    icon="⚑",
+)
+st.dataframe(
+    markers.rename(
+        columns={
+            "review_rank": "Rank", "marker": "Marker", "n_scripts": "Scripts",
+            "mean_residual": "Mean residual", "severity_score": "Severity",
+            "flag": "Flag",
+        }
+    )[["Rank", "Marker", "Scripts", "Mean residual", "Severity", "Flag"]],
+    use_container_width=True,
+    hide_index=True,
+)
+st.caption(
+    "Severity is a robust (median/MAD) distance from the marker peer group, not "
+    "from zero — because with thousands of scripts per marker, a trivial residual "
+    "is 'statistically significant' yet meaningless. The two genuinely biased "
+    "markers rank far above the rest; the fair markers cluster near zero."
+)
+
 # --- cleaning connects to inference ------------------------------------------
 
 st.header("Why cleaning is an inference problem")

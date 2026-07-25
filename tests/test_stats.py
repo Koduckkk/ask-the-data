@@ -85,3 +85,59 @@ def test_sentinel_impact_is_grounded_and_nonempty():
     assert note
     # It states a real bias magnitude, not a placeholder.
     assert "points" in note and "%" in note
+
+
+# --- school effects (shrinkage) ----------------------------------------------
+
+
+def test_shrinkage_pulls_small_schools_more(con):
+    df = S.school_effects("Numeracy", con=con)
+    # Reliability rises with sample size — big schools trust their own mean.
+    assert df["reliability"].max() > df["reliability"].min()
+    # The least reliable (smallest) school is pulled further than the most reliable.
+    least = df.loc[df["reliability"].idxmin()]
+    most = df.loc[df["reliability"].idxmax()]
+    assert abs(least["pulled_by"]) > abs(most["pulled_by"])
+
+
+def test_shrunk_estimate_lies_between_raw_and_grand_mean(con):
+    df = S.school_effects("Numeracy", con=con)
+    grand = float((df["raw_mean"] * df["n"]).sum() / df["n"].sum())
+    # Each shrunk estimate is between its raw mean and the grand mean.
+    for _, r in df.iterrows():
+        lo, hi = sorted([r["raw_mean"], grand])
+        assert lo - 0.1 <= r["shrunk_estimate"] <= hi + 0.1
+
+
+# --- marker anomaly detection ------------------------------------------------
+
+
+def test_marker_detection_flags_the_biased_markers(con):
+    from emit_vendor import MARKER_SEVERITY
+
+    result = S.marker_anomalies(con=con)
+    flagged = set(result[result["flag"] != "ok"]["marker"])
+    # The generator's deliberately biased markers must be caught.
+    harsh = {m for m, s in MARKER_SEVERITY.items() if s < -0.5}
+    lenient = {m for m, s in MARKER_SEVERITY.items() if s > 0.5}
+    assert harsh <= flagged
+    assert lenient <= flagged
+
+
+def test_marker_detection_does_not_flag_fair_markers(con):
+    from emit_vendor import MARKER_SEVERITY
+
+    result = S.marker_anomalies(con=con)
+    flagged = set(result[result["flag"] != "ok"]["marker"])
+    fair = {m for m, s in MARKER_SEVERITY.items() if s == 0.0}
+    # Fair markers must not be flagged — the point of peer-relative thresholding.
+    assert not (fair & flagged)
+
+
+def test_marker_harsh_and_lenient_labelled_correctly(con):
+    result = S.marker_anomalies(con=con)
+    harsh = result[result["flag"] == "harsh"]["mean_residual"]
+    lenient = result[result["flag"] == "lenient"]["mean_residual"]
+    # Harsh markers under-score (negative residual), lenient over-score.
+    assert (harsh < 0).all()
+    assert (lenient > 0).all()

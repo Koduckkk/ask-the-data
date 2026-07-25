@@ -73,6 +73,19 @@ WRITING_CRITERIA = (
 # The sentinel that means "not attempted", which must not be summed as a mark.
 NOT_ATTEMPTED = 9
 
+# Writing is human-marked, so marker severity is a real bias source. A pool of
+# markers scores the scripts; most are fair (~0 bias) but a few are
+# systematically harsh or lenient. The bias shifts each criterion score, so a
+# marker-severity model can recover which markers are anomalous. Values are
+# deliberate constants for reproducibility. (severity: points shifted per
+# criterion, negative = harsh.)
+MARKER_SEVERITY = {
+    "MKR-01": 0.0, "MKR-02": 0.0, "MKR-03": 0.0, "MKR-04": 0.0,
+    "MKR-05": 0.0, "MKR-06": 0.0, "MKR-07": 0.0, "MKR-08": 0.0,
+    "MKR-09": -1.4,   # anomalously harsh
+    "MKR-10": 1.3,    # anomalously lenient
+}
+
 
 def _item_columns(year_level: int) -> list[tuple[str, str, int]]:
     """Every item column for a year level, as (column_name, domain, question)."""
@@ -211,6 +224,17 @@ def _build_writing(roster: Roster, year_levels: tuple[int, ...], rng: np.random.
         }
     )
     block = np.vstack([_distribute_criteria(int(r), rng) for r in raws])
+
+    # Assign each script to a marker, and apply that marker's severity. Writing
+    # is human-marked, so a harsh marker genuinely writes down lower scores and a
+    # lenient one higher — a real bias the pipeline must be able to detect. The
+    # shift is per criterion, clipped to the valid 0-6 band.
+    markers = list(MARKER_SEVERITY)
+    assigned = rng.choice(markers, size=len(frame))
+    severity = np.array([MARKER_SEVERITY[m] for m in assigned])
+    block = np.clip(np.rint(block + severity[:, None]).astype(int), 0, 6)
+
+    frame["marker_id"] = assigned
     for j, crit in enumerate(WRITING_CRITERIA):
         frame[crit] = block[:, j]
     return frame

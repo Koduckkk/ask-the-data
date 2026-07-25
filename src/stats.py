@@ -178,6 +178,166 @@ def school_ranking(
     return reliable, flagged
 
 
+# --- school effects with shrinkage (partial pooling) -------------------------
+
+
+def school_effects(
+    domain: str = "Numeracy",
+    con: duckdb.DuckDBPyConnection | None = None,
+) -> pd.DataFrame:
+    """Estimate each school's true mean with empirical-Bayes shrinkage.
+
+    A raw school average is unreliable when the school is small — an extreme
+    value is probably noise, not a real effect. Partial pooling handles this
+    principled-ly: each school's estimate is pulled toward the overall mean by a
+    weight that depends on its sample size and on how much schools genuinely
+    differ. A large school barely moves (we trust its own average); a tiny school
+    is pulled most of the way to the mean (its own average is mostly noise).
+
+    This is the continuous, statistically-grounded version of the n>=30 flag: the
+    same "distrust small samples" judgement, applied smoothly rather than with an
+    arbitrary cutoff. It is how value-added / school-effect models actually work.
+
+    Returns one row per school with its raw mean, its shrunk estimate, the
+    reliability weight, and how far it was pulled.
+    """
+    con, owns = _connect(con)
+    try:
+        rows = con.execute(
+            """
+            SELECT sc.school_name AS school, COUNT(*) AS n,
+                   AVG(r.scaled_score) AS raw_mean,
+                   VAR_SAMP(r.scaled_score) AS within_var
+            FROM results r JOIN schools sc ON r.school_id = sc.school_id
+            WHERE r.domain = ? AND r.scaled_score IS NOT NULL
+            GROUP BY sc.school_name
+            """,
+            [domain],
+        ).fetchdf()
+    finally:
+        if owns:
+            con.close()
+
+    grand_mean = float((rows["raw_mean"] * rows["n"]).sum() / rows["n"].sum())
+    # Within-school variance (average noise level of one student's score).
+    sigma2 = float(rows["within_var"].mean())
+    # Between-school variance (how much school true means genuinely differ) —
+    # the variance of the raw means, minus the sampling noise each one carries.
+    observed_var = float(rows["raw_mean"].var(ddof=1))
+    tau2 = max(observed_var - sigma2 / rows["n"].mean(), 1.0)
+
+    # Reliability weight per school: how much to trust its own average.
+    # weight -> 1 for large n (keep own mean), -> 0 for small n (use grand mean).
+    weight = tau2 / (tau2 + sigma2 / rows["n"])
+    shrunk = weight * rows["raw_mean"] + (1 - weight) * grand_mean
+
+    out = pd.DataFrame(
+        {
+            "school": rows["school"],
+            "n": rows["n"].astype(int),
+            "raw_mean": rows["raw_mean"].round(1),
+            "shrunk_estimate": shrunk.round(1),
+            "reliability": weight.round(3),
+            "pulled_by": (rows["raw_mean"] - shrunk).round(1),
+        }
+    )
+    return out.sort_values("shrunk_estimate", ascending=False).reset_index(drop=True)
+
+
+# --- marker anomaly detection ------------------------------------------------
+
+
+def marker_anomalies(con: duckdb.DuckDBPyConnection | None = None) -> pd.DataFrame:
+    """Flag markers scoring anomalously harsh or lenient, controlling for ability.
+
+    Writing is human-marked, so a marker's severity confounds with the quality of
+    the students they happened to mark — a harsh score might just mean a weak
+    cohort. To separate the two, each script's writing score is compared to what
+    the student's *other-domain* ability predicts (their mean scaled score across
+    Reading/Numeracy/Spelling/Grammar). The residual (actual − expected) removes
+    student ability; averaging residuals by marker isolates the marker effect.
+
+    A marker whose mean residual sits many standard errors from zero is flagged:
+    consistently under- or over-scoring relative to ability is the signature of a
+    severe or lenient marker. This is the spirit of the operational approach
+    (covariate-adjust, then treat marker as the effect of interest) in a compact,
+    transparent form — the same "explain what you can, flag what's left" logic as
+    the school-effects model.
+
+    Requires a marker_id on the writing feed; reads it straight from the vendor
+    files since the cleaned DB does not carry marker.
+    """
+    from emit_vendor import WRITING_CRITERIA
+    from emit_warehouse import RAW_DIR
+
+    # Writing scores + marker, from the vendor writing files.
+    writing = pd.concat(
+        [pd.read_csv(RAW_DIR / f"vendor_writing_{lbl}.csv") for lbl in ("y3", "y579")],
+        ignore_index=True,
+    ).drop_duplicates("PlatformId")
+    writing["writing_raw"] = writing[list(WRITING_CRITERIA)].sum(axis=1)
+    writing = writing[["PlatformId", "marker_id", "writing_raw"]]
+
+    # Each student's ability proxy: mean scaled score in the *other* domains.
+    con, owns = _connect(con)
+    try:
+        ability = con.execute(
+            """
+            SELECT student_id, AVG(scaled_score) AS other_ability
+            FROM results
+            WHERE domain != 'Writing' AND scaled_score IS NOT NULL
+            GROUP BY student_id
+            """
+        ).fetchdf()
+    finally:
+        if owns:
+            con.close()
+
+    df = writing.merge(ability, left_on="PlatformId", right_on="student_id")
+
+    # Expected writing from ability: a simple linear fit (writing_raw ~ ability).
+    # The residual strips out student ability, leaving the marker effect.
+    x = df["other_ability"].to_numpy()
+    y = df["writing_raw"].to_numpy()
+    slope, intercept = np.polyfit(x, y, 1)
+    df["residual"] = y - (slope * x + intercept)
+
+    # Aggregate residuals by marker: mean residual, and its standard error.
+    grp = df.groupby("marker_id")["residual"]
+    summary = pd.DataFrame(
+        {
+            "marker": grp.mean().index,
+            "n_scripts": grp.size().to_numpy(),
+            "mean_residual": grp.mean().round(2).to_numpy(),
+            "std_error": (grp.std() / np.sqrt(grp.size())).round(3).to_numpy(),
+        }
+    )
+    # Flag an anomaly by distance from the MARKER PEER GROUP, not from zero. With
+    # thousands of scripts per marker, a trivial residual is "statistically
+    # significant" (huge z vs zero) yet practically meaningless — so comparing to
+    # zero would flag everyone. A real anomaly is a marker far from the *other
+    # markers*. Use a robust centre/spread (median and MAD) so the biased markers
+    # don't inflate the yardstick used to judge them.
+    med = summary["mean_residual"].median()
+    mad = (summary["mean_residual"] - med).abs().median() or 1e-9
+    # Robust severity score: deviation from the marker peer median in MAD units.
+    # This is the normalised, comparable number a review team ranks on — "give me
+    # the top N most-anomalous markers" is just the head of this sorted list.
+    summary["severity_score"] = ((summary["mean_residual"] - med) / (1.4826 * mad)).round(1)
+    summary["flag"] = np.where(
+        summary["severity_score"].abs() > 3.5,
+        np.where(summary["mean_residual"] < med, "harsh", "lenient"),
+        "ok",
+    )
+    # Rank by how far the marker deviates from its peers — most anomalous first —
+    # so the output is a review queue, not just a set of flags.
+    ranked = summary.reindex(
+        summary["severity_score"].abs().sort_values(ascending=False).index
+    ).reset_index(drop=True)
+    ranked.insert(0, "review_rank", range(1, len(ranked) + 1))
+    return ranked
+
+
 # --- connecting cleaning to inference ----------------------------------------
 
 

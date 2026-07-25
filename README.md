@@ -37,7 +37,7 @@ what it wrote. The data is not committed; the generator is, and regenerating is
 the intended way to get it.
 
 ```bash
-python src/generate_data.py --students 400000   # production scale (~2.5s)
+python src/generate_data.py --students 400000   # production scale (~20s on a laptop)
 python src/generate_data.py --seed 7            # a different reproducible batch
 ```
 

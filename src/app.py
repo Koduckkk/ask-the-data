@@ -71,7 +71,7 @@ with st.sidebar:
     st.caption("Example questions")
     for example in NL.demo_examples():
         # Clicking an example fills the box (works in either mode).
-        if st.button(example, use_container_width=True):
+        if st.button(example, width='stretch'):
             st.session_state["question"] = example
 
     st.divider()
@@ -119,7 +119,7 @@ if question:
                     # Horizontal bars keep category labels readable — no
                     # rotated text, and long school names fit down the y-axis.
                     st.bar_chart(chart_df, horizontal=True)
-            st.dataframe(pretty, use_container_width=True, hide_index=True)
+            st.dataframe(pretty, width='stretch', hide_index=True)
             st.caption(f"{len(result.rows):,} row(s)")
         else:
             st.warning(result.error)
@@ -127,7 +127,7 @@ if question:
                 st.caption(result.suggestion)
             # On a demo miss, offer the closest example questions as buttons.
             for example in result.examples:
-                if st.button(example, key=f"near-{example}", use_container_width=True):
+                if st.button(example, key=f"near-{example}", width='stretch'):
                     st.session_state["question"] = example
                     st.rerun()
 else:

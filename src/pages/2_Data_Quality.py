@@ -75,7 +75,7 @@ for i, (rule, label) in enumerate(highlights.items()):
 with st.expander("Full cleaning report (every rule)"):
     st.dataframe(
         report.rename(columns={"rule": "Rule", "column": "Column", "changed": "Values changed", "detail": "Detail"}),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
 
@@ -104,7 +104,7 @@ st.markdown(
 )
 st.code("reshape.zero_refused_scores()", language="python")
 refused = _refused()
-st.dataframe(refused, use_container_width=True, hide_index=True)
+st.dataframe(refused, width='stretch', hide_index=True)
 st.caption(
     "These scores are well-formed and in range. Nothing in the results file "
     "alone would flag them — this is a cross-table judgement, not a formatting fix."
@@ -126,7 +126,7 @@ for defect, explanation, examples, function in _examples():
     st.code(f"{function}()", language="python")
     st.dataframe(
         examples.rename(columns={"before": "Before (raw)", "after": "After (cleaned)"}),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
 
@@ -167,7 +167,7 @@ st.dataframe(
         {"name similarity": "{:.2f}", "value overlap": "{:.2f}",
          "format match": "{:.0f}", "combined": "{:.2f}"}
     ),
-    use_container_width=True,
+    width='stretch',
     hide_index=True,
 )
 st.caption(

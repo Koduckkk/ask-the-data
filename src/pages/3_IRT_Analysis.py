@@ -85,7 +85,7 @@ if st.button("Fit the 2PL model", type="primary"):
                     "discrimination": "Discrimination",
                 }
             ),
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
         )
     with right:
@@ -158,7 +158,7 @@ if st.button("Fit the 2PL model", type="primary"):
                 "ability (θ)": np.round(ability[picks], 3),
             }
         )
-        st.dataframe(sample, use_container_width=True, hide_index=True)
+        st.dataframe(sample, width='stretch', hide_index=True)
         st.caption(
             "Real students by platform id (PSI) — the same id that threads "
             "through the whole pipeline — sampled evenly from highest to lowest "

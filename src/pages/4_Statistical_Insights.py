@@ -105,7 +105,7 @@ with left:
                 "std_error": "Std. error",
             }
         ),
-        use_container_width=True,
+        width='stretch',
         hide_index=True,
     )
     st.caption(
@@ -121,7 +121,7 @@ with right:
             flagged.rename(
                 columns={"school": "School", "n": "Students", "mean": "Mean (unreliable)"}
             ),
-            use_container_width=True,
+            width='stretch',
             hide_index=True,
         )
         st.caption(
@@ -156,7 +156,7 @@ st.dataframe(
             "pulled_by": "Pulled by",
         }
     ),
-    use_container_width=True,
+    width='stretch',
     hide_index=True,
 )
 st.caption(
@@ -189,7 +189,7 @@ n_flagged = int((markers["flag"] != "ok").sum())
 st.error(
     f"**{n_flagged} markers flagged** for review — scoring anomalously relative "
     f"to their peers, after controlling for student ability.",
-    icon="⚑",
+    icon="🚩",
 )
 st.dataframe(
     markers.rename(
@@ -199,7 +199,7 @@ st.dataframe(
             "flag": "Flag",
         }
     )[["Rank", "Marker", "Scripts", "Mean residual", "Severity", "Flag"]],
-    use_container_width=True,
+    width='stretch',
     hide_index=True,
 )
 st.caption(

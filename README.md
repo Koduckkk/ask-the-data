@@ -7,6 +7,8 @@
 > displayed next to the results so a human can verify the work.** Read-only guardrails,
 > offline demo mode, fully reproducible on synthetic data.
 
+![Anomaly Detection — marker-severity review queue and school-effect shrinkage](docs/images/hero-anomaly.png)
+
 Built incrementally — see the commit history.
 
 ## Why the mess is the point
@@ -93,6 +95,16 @@ underpins it all:
   contradiction that no single file reveals, and a **schema-drift detector** that
   catches a source renaming its id column between years and suggests the remap by
   value overlap (proposing, never silently re-joining on a guessed key).
+
+### Screens
+
+The query page — plain-English question, the generated SQL shown beside the result:
+
+![Ask the Data — a question, its generated SQL, and the charted result](docs/images/query.png)
+
+Data Quality — real dirty values next to their cleaned form, each traced to a named rule:
+
+![Data Quality — before/after per defect with the cleaning function named](docs/images/data-quality.png)
 
 With no API key this runs in **demo mode** — a set of canned questions — so the
 whole pipeline is runnable without one. Set `ANTHROPIC_API_KEY` (copy

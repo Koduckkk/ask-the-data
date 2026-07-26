@@ -76,7 +76,7 @@ with st.expander("How this works — shrinkage and marker screening"):
         "student's other-domain mean:"
     )
     st.latex(
-        r"r_{i} = \text{writing}_i - \mathbb{E}[\text{writing}\mid "
+        r"r_{i} = \text{score}_i - \mathbb{E}[\text{score}\mid "
         r"\text{other-domain ability}_i]"
     )
     st.markdown(
